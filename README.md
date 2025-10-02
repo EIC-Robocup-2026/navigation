@@ -4,6 +4,11 @@
 
 run this on host pc
 
+set ros domain id
+```
+export ROS_DOMAIN_ID=23
+```
+
 run slam
 ```
 ros2 launch slam_toolbox online_async_launch.py use_sim_time:=false
