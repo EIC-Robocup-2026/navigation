@@ -9,7 +9,7 @@ def generate_launch_description():
     useSimTime = LaunchConfiguration('use_sim_time', default='false')
 
     config_dir = os.path.join(
-        get_package_share_directory('robot_simulation'),
+        get_package_share_directory('robot_navigation'),
         'config','slam'
     )
     config_file = 'turtlebot3_cartographer.lua'
@@ -43,11 +43,11 @@ def generate_launch_description():
             remappings=[('/map', '/map')],
         ),
 
-        Node(
-            package='robot_state_publisher',
-            executable='robot_state_publisher',
-            name='robot_state_publisher',
-            output='screen',
-            parameters=[{'use_sim_time': useSimTime}],
-        ),
+        # Node(
+        #     package='robot_state_publisher',
+        #     executable='robot_state_publisher',
+        #     name='robot_state_publisher',
+        #     output='screen',
+        #     parameters=[{'use_sim_time': useSimTime}],
+        # ),
     ])
