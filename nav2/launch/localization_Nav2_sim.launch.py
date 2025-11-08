@@ -12,7 +12,7 @@ def generate_launch_description():
     default_nav2_config = os.path.join(
         get_package_share_directory('robot_navigation'),
         'config', 'nav2' ,
-        'nav2_mppi_real_walkie_param.yaml'
+        'nav2_RPP_walkie_sim_params.yaml'
     )
 
     # Create launch configuration variables
@@ -21,12 +21,12 @@ def generate_launch_description():
     nav2_config = LaunchConfiguration('nav2_config')
     # rviz_config_file = get_package_share_directory('robot_navigation') + 'rviz/nav.rviz'
 
-    default_map = get_package_share_directory('robot_navigation') + '/map/EIC/map_976.yaml'
+    default_map = get_package_share_directory('robot_navigation') + 'map/8_23102025_SimWalkie_awssmallhouse_slam_toolbox/map.yaml'
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='false',
+        default_value='true',
         description='Use simulation clock if true'
     )
 
