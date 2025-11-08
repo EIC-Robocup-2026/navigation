@@ -9,7 +9,7 @@
 
 slam_toolbox:
   ros__parameters:
-
+    use_sim_time: false
     # Plugin params
     solver_plugin: solver_plugins::CeresSolver
     ceres_linear_solver: SPARSE_NORMAL_CHOLESKY
@@ -22,7 +22,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_footprint
-    scan_topic: /scan
+    scan_topic: /merged_lidar
     use_map_saver: true
     mode: mapping #localization
 

@@ -12,20 +12,21 @@ def generate_launch_description():
     default_nav2_config = os.path.join(
         get_package_share_directory('robot_navigation'),
         'config', 'nav2' ,
-        'nav2_RPP_tb3_gazebo_params.yaml'
+        'nav2_mppi_real_walkie_param.yaml'
     )
 
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_yaml_file = LaunchConfiguration('map')
     nav2_config = LaunchConfiguration('nav2_config')
+    # rviz_config_file = get_package_share_directory('robot_navigation') + 'rviz/nav.rviz'
 
-    default_map = get_package_share_directory('robot_navigation') + '/map/1_280924_tb3_world_carthographer/map_1727461600.yaml'
+    default_map = get_package_share_directory('robot_navigation') + '/map/EIC/map_976.yaml'
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         'use_sim_time',
-        default_value='true',
+        default_value='false',
         description='Use simulation clock if true'
     )
 
@@ -70,6 +71,11 @@ def generate_launch_description():
             'params_file' : nav2_config,
         }.items()
     )
+    # rviz_cmd = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(package_dir, 'launch', 'rviz.launch.py')),
+    #     condition=IfCondition(use_rviz),
+    #     launch_arguments={'rviz_config': rviz_config_file}.items())
 
     # Create launch description
     ld = LaunchDescription()
@@ -78,6 +84,8 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
+    # ld.add_action(rviz_cmd)
+
 
     # Add both localization and navigation launches
     # ld.add_action(localization_launch)
