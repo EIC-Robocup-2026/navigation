@@ -12,7 +12,7 @@ def generate_launch_description():
     default_nav2_config = os.path.join(
         get_package_share_directory('robot_navigation'),
         'config', 'nav2' ,
-        'nav2_mppi_walkie_real_param.yaml'
+        'nav2_mppi_walkie_real_param_stvl.yaml'
     )
 
     # Create launch configuration variables
