@@ -460,8 +460,8 @@ collision_monitor:
     use_sin_tim: false
     base_frame_id: base_footprint
     odom_frame_id: odom
-    cmd_vel_in_topic: cmd_vel_nav
-    cmd_vel_out_topic: cmd_vel
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel"
     observation_sources: ["scan"]
 
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]

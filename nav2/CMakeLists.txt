@@ -10,6 +10,25 @@ find_package(ament_cmake REQUIRED)
 find_package(slam_toolbox REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(rclcpp_action REQUIRED)
+find_package(nav2_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+
+ament_python_install_package(${PROJECT_NAME})
+
+# Install Python robot_navigation
+install(PROGRAMS
+  robot_navigation/human_follower_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(PROGRAMS
+  robot_navigation/accel_stamp_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+install(PROGRAMS
+  robot_navigation/goPose_Backend.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

@@ -1,6 +1,6 @@
 amcl:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -46,7 +46,7 @@ amcl:
 
 bt_navigator:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_tim: false
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: /odom
@@ -122,11 +122,11 @@ bt_navigator:
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
 
 bt_navigator_navigate_to_pose_rclcpp_node:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
 
 controller_server:
   ros__parameters:
@@ -134,7 +134,7 @@ controller_server:
     # by velocity_smoother + collision_monitor
     cmd_vel_topic: "cmd_vel_nav"
 
-    use_sin_tim: false
+    use_sim_time: false
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.5
@@ -157,7 +157,7 @@ controller_server:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.2
-      yaw_goal_tolerance: 0.9
+      yaw_goal_tolerance: 0.3
 
 
     FollowPath:
@@ -259,7 +259,7 @@ local_costmap:
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_footprint
-      use_sin_tim: false
+      use_sim_time: false
       rolling_window: true
       width: 3
       height: 3
@@ -302,7 +302,7 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
-      use_sin_tim: false
+      use_sim_time: false
       robot_radius: 0.15
       resolution: 0.05
       track_unknown_space: true
@@ -332,7 +332,7 @@ global_costmap:
 
 map_server:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
     yaml_filename: ""
@@ -344,7 +344,7 @@ map_server:
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
-    use_sin_tim: false
+    use_sim_time: false
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
@@ -354,7 +354,7 @@ planner_server:
 
 smoother_server:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     smoother_plugins: ["simple_smoother"]
     simple_smoother:
       plugin: "nav2_smoother::SimpleSmoother"
@@ -381,7 +381,7 @@ behavior_server:
     global_frame: odom
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
-    use_sin_tim: false
+    use_sim_time: false
     simulate_ahead_time: 2.0
     max_rotational_vel: 3.0
     min_rotational_vel: 1.8
@@ -389,11 +389,11 @@ behavior_server:
 
 robot_state_publisher:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
 
 waypoint_follower:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     loop_rate: 20
     stop_on_failure: false
     waypoint_task_executor_plugin: "wait_at_waypoint"
@@ -404,12 +404,12 @@ waypoint_follower:
 
 velocity_smoother:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.26, 0.0, 1.0]
-    min_velocity: [-0.26, 0.0, -1.0]
+    max_velocity: [0.15, 0.0, 1.0]
+    min_velocity: [-0.15, 0.0, -1.0]
     max_accel: [2.5, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "odom"
@@ -419,7 +419,7 @@ velocity_smoother:
 
 collision_monitor:
   ros__parameters:
-    use_sin_tim: false
+    use_sim_time: false
     base_frame_id: base_footprint
     odom_frame_id: odom
     cmd_vel_in_topic: cmd_vel_nav
