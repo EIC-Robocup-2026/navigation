@@ -13,22 +13,46 @@ find_package(std_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
 
-ament_python_install_package(${PROJECT_NAME})
+# Generate the Services
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "srv/MoveRobot.srv"
+  DEPENDENCIES geometry_msgs
+)
+
+add_executable(Sgoal_Service_node robot_navigation/SgoalService.cpp) 
+
+ament_target_dependencies(Sgoal_Service_node
+  rclcpp
+  std_msgs
+  rclcpp_action
+  nav2_msgs
+  geometry_msgs
+  nav_msgs
+  tf2
+  tf2_geometry_msgs
+)
+
+rosidl_target_interfaces(Sgoal_Service_node
+  ${PROJECT_NAME} "rosidl_typesupport_cpp")
+
+install(TARGETS
+  Sgoal_Service_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install Python robot_navigation
 install(PROGRAMS
   robot_navigation/human_follower_node.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-install(PROGRAMS
   robot_navigation/accel_stamp_node.py
-  DESTINATION lib/${PROJECT_NAME}
-)
-install(PROGRAMS
   robot_navigation/goPose_Backend.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -48,6 +72,7 @@ install(
     launch
     config
     map
+    srv
   DESTINATION share/${PROJECT_NAME}/
 )
 
