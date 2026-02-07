@@ -8,10 +8,8 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
-
-// Custom Service Header (Make sure you generated this!)
+#include "visualization_msgs/msg/marker.hpp"
 #include "robot_navigation/srv/move_robot.hpp" 
-
 #include "tf2/LinearMath/Quaternion.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp" 
 
@@ -38,9 +36,10 @@ public:
 
         nav_client_ = rclcpp_action::create_client<NavigateToPose>(
             this, "navigate_to_pose");
+        
+        marker_pub_ = this->create_publisher<visualization_msgs::msg::Marker>("smart_goal_markers", 10);
 
         RCLCPP_INFO(this->get_logger(), ">>> Smart Service Node Ready!");
-        RCLCPP_INFO(this->get_logger(), "    Command: 'ros2 service call /move_robot ...'");
     }
 
 private:
@@ -48,7 +47,37 @@ private:
     rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr costmap_sub_;
     rclcpp::Service<robot_navigation::srv::MoveRobot>::SharedPtr srv_server_;
     rclcpp_action::Client<NavigateToPose>::SharedPtr nav_client_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub_;
 
+    void publishMarker(double x, double y, double theta, int id, float r, float g, float b) {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "map";
+        marker.header.stamp = this->now();
+        marker.ns = "smart_goal";
+        marker.id = id;
+        marker.type = visualization_msgs::msg::Marker::ARROW;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        
+        marker.pose.position.x = x;
+        marker.pose.position.y = y;
+        marker.pose.position.z = 0.0;
+        
+        tf2::Quaternion q;
+        q.setRPY(0, 0, theta);
+        marker.pose.orientation = tf2::toMsg(q);
+
+        marker.scale.x = 0.5; 
+        marker.scale.y = 0.08; 
+        marker.scale.z = 0.08; 
+        
+        marker.color.a = 1.0;
+        marker.color.r = r;
+        marker.color.g = g;
+        marker.color.b = b;
+
+        marker_pub_->publish(marker);
+    }
+    
     void service_callback(
         const std::shared_ptr<robot_navigation::srv::MoveRobot::Request> request,
         std::shared_ptr<robot_navigation::srv::MoveRobot::Response> response)
@@ -62,8 +91,11 @@ private:
             return;
         }
 
+        publishMarker(request->x, request->y, request->theta, 1, 1.0, 0.0, 0.0);
+
         double final_x = request->x;
         double final_y = request->y;
+        double final_theta = request->theta;
         bool adjusted = false;
 
         if (!isPointFree(final_x, final_y, true)) {
@@ -74,7 +106,12 @@ private:
                 final_x = safe_pose->pose.position.x;
                 final_y = safe_pose->pose.position.y;
                 adjusted = true;
-                RCLCPP_INFO(this->get_logger(), ">>> Fixed: New target is (%.2f, %.2f)", final_x, final_y);
+                
+                double dy = request->y - final_y;
+                double dx = request->x - final_x;
+                final_theta = std::atan2(dy, dx);
+
+                RCLCPP_INFO(this->get_logger(), ">>> Fixed: New target (%.2f, %.2f) facing original", final_x, final_y);
             } else {
                 response->success = false;
                 response->message = "Failed: Goal is blocked and no safe point found.";
@@ -83,6 +120,8 @@ private:
             }
         }
 
+        publishMarker(final_x, final_y, final_theta, 2, 0.0, 1.0, 0.0);
+
         auto p = std::make_shared<geometry_msgs::msg::PoseStamped>();
         p->header.frame_id = "map";
         p->header.stamp = this->now();
@@ -90,14 +129,16 @@ private:
         p->pose.position.y = final_y;
         
         tf2::Quaternion q;
-        q.setRPY(0, 0, request->theta);
+        q.setRPY(0, 0, final_theta);
         p->pose.orientation = tf2::toMsg(q);
 
         sendNavGoal(*p);
 
         response->success = true;
         if (adjusted) {
-            response->message = "Goal adjusted to nearest safe point.";
+            char buffer[100];
+            snprintf(buffer, sizeof(buffer), "Goal adjusted to: %.2f, %.2f", final_x, final_y);
+            response->message = std::string(buffer);
         } else {
             response->message = "Goal accepted.";
         }

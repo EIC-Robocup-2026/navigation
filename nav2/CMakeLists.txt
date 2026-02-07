@@ -16,7 +16,9 @@ find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+
 
 # Generate the Services
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -35,6 +37,7 @@ ament_target_dependencies(Sgoal_Service_node
   nav_msgs
   tf2
   tf2_geometry_msgs
+  visualization_msgs
 )
 
 rosidl_target_interfaces(Sgoal_Service_node
