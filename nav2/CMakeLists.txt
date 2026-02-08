@@ -55,6 +55,10 @@ install(PROGRAMS
   robot_navigation/goPose_Backend.py
   DESTINATION lib/${PROJECT_NAME}
 )
+install(PROGRAMS
+  robot_navigation/current_pose_publisher.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 
 if(BUILD_TESTING)
