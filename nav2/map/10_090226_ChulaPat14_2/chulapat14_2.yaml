@@ -1,0 +1,7 @@
+image: chulapat14_2.pgm
+mode: trinary
+resolution: 0.050
+origin: [-6.951, -4.645, 0]
+negate: 0
+occupied_thresh: 0.65
+free_thresh: 0.196
