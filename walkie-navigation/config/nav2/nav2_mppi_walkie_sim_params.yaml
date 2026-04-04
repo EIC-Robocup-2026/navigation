@@ -49,7 +49,7 @@ bt_navigator:
     use_sim_time: true
     global_frame: map
     robot_base_frame: base_footprint
-    odom_topic: /odom
+    odom_topic: "/omni_wheel_drive_controller/odom"
     bt_loop_duration: 10
     default_server_timeout: 20
     wait_for_service_timeout: 1000
@@ -82,7 +82,8 @@ controller_server:
   ros__parameters:
     # Put controller output on a separate topic so it can be filtered
     # by velocity_smoother + collision_monitor
-    cmd_vel_topic: "cmd_vel_nav"
+    cmd_vel_topic: "/cmd_vel_nav"
+    odom_topic: "/omni_wheel_drive_controller/odom"  # Change this from "odom"
 
     use_sim_time: true
     controller_frequency: 20.0
@@ -124,6 +125,7 @@ controller_server:
       rotate_to_goal_heading: true
 
       # MPPI core settings
+      visualize: true
       time_steps: 35
       model_dt: 0.05
       batch_size: 2000
@@ -164,7 +166,7 @@ controller_server:
       TrajectoryValidator:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
         collision_lookahead_time: 2.0
-        consider_footprint: false
+        consider_footprint: true
 
       critics:
         [
@@ -175,22 +177,32 @@ controller_server:
           "PathAngleCritic",
           "CostCritic",
           "TwirlingCritic",
+          # "ObstaclesCritic",
         ]
+      ObstaclesCritic:
+        enabled: true
+        cost_power: 1
+        repulsion_weight: 1.5
+        critical_weight: 20.0
+        consider_footprint: false
+        collision_cost: 10000.0
+        collision_margin_distance: 0.1
+        near_goal_distance: 0.5
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 10.0
+        cost_weight: 5.0
         threshold_to_consider: 1.4
       GoalAngleCritic:
         enabled: true
-        cost_weight: 5.0
+        cost_weight: 3.0
         cost_power: 2
         threshold_to_consider: 1.5
         symmetric_yaw_tolerance: true
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 14.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 4
         threshold_to_consider: 0.5
@@ -199,7 +211,7 @@ controller_server:
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 20.0
+        cost_weight: 5.0
         offset_from_furthest: 5
         threshold_to_consider: 1.5
       PathAngleCritic:
@@ -211,7 +223,7 @@ controller_server:
         max_angle_to_furthest: 1.0
         mode: 0
       CostCritic:
-        enabled: false
+        enabled: true
         cost_power: 1
         cost_weight: 4.0
         critical_cost: 300.0
@@ -421,7 +433,7 @@ velocity_smoother:
     min_velocity: [*velocity_value_n, *velocity_value_n, -1.0]
     max_accel: [2.5, 2.5, 3.2]
     max_decel: [-2.5, -2.5, -3.2]
-    odom_topic: "odom"
+    odom_topic: "/omni_wheel_drive_controller/odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
     velocity_timeout: 1.0
@@ -432,7 +444,7 @@ collision_monitor:
     base_frame_id: base_footprint
     odom_frame_id: odom
     cmd_vel_in_topic: smootherd
-    cmd_vel_out_topic: cmd_vel
+    cmd_vel_out_topic: "/cmd_vel_nav"
     observation_sources: ["scan"]
 
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
