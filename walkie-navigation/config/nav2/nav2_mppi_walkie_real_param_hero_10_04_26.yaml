@@ -1,6 +1,6 @@
 amcl:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -46,7 +46,7 @@ amcl:
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: "/omni_wheel_drive_controller/odom"
@@ -54,29 +54,28 @@ bt_navigator:
     default_server_timeout: 20
     wait_for_service_timeout: 1000
 
-    # default_nav_to_pose_bt_xml: (find-pkg-share robot_navigation) config/nav2/behavior_tree/nav_topose_no_spin_backup_bt.xml
-
+    default_nav_to_pose_bt_xml: $(find-pkg-share robot_navigation)/config/nav2/behavior_tree/nav_to_pose_real_recovery_bt.xml
+    # not real nav through poses
+    default_nav_through_poses_bt_xml: $(find-pkg-share robot_navigation)/config/nav2/behavior_tree/nav_to_pose_real_recovery_bt.xml
     error_code_name_prefixes:
       - assisted_teleop
-      - backup
       - compute_path
       - dock_robot
       - drive_on_heading
       - follow_path
       - nav_thru_poses
       - nav_to_pose
-      - spin
       - route
       - undock_robot
       - wait
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 bt_navigator_navigate_to_pose_rclcpp_node:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 controller_server:
   ros__parameters:
@@ -85,7 +84,7 @@ controller_server:
     cmd_vel_topic: "/cmd_vel_controller"
     odom_topic: "/omni_wheel_drive_controller/odom"  # Change this from "odom"
 
-    use_sim_time: true
+    use_sim_time: false
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
@@ -107,8 +106,8 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.2
-      yaw_goal_tolerance: 0.3
+      xy_goal_tolerance: 0.1
+      yaw_goal_tolerance: 0.01
 
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
@@ -122,11 +121,11 @@ controller_server:
       max_angular_accel: 6.0
       simulate_ahead_time: 1.0
       rotate_to_heading_once: True
-      rotate_to_goal_heading: true
+      rotate_to_goal_heading: True
 
       # MPPI core settings
-      visualize: true
-      time_steps: 35
+      visualize: True
+      time_steps: 56
       model_dt: 0.05
       batch_size: 2000
 
@@ -134,18 +133,18 @@ controller_server:
       vy_std: 0.1
       wz_std: 0.6
 
-      vx_max: &velocity_value_p 1.0
-      vx_min: &velocity_value_n -1.0
+      vx_max: &velocity_value_p 0.3
+      vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.9
-      wz_min: -1.9
+      wz_max: 1.0
+      wz_min: -1.0
 
       ax_max: 2.5
       ax_min: -2.5
       ay_max: 2.5
       ay_min: -2.5
-      az_max: 3.2
+      az_max: 2.5
 
       iteration_count: 1
       prune_distance: 1.0
@@ -155,9 +154,9 @@ controller_server:
 
       motion_model: "Omni"
 
-      visualize: false
       reset_period: 1.0
       regenerate_noises: false
+
 
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -166,7 +165,7 @@ controller_server:
       TrajectoryValidator:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
         collision_lookahead_time: 2.0
-        consider_footprint: true
+        consider_footprint: false
 
       critics:
         [
@@ -177,7 +176,7 @@ controller_server:
           "PathAngleCritic",
           "CostCritic",
           "TwirlingCritic",
-          # "ObstaclesCritic",
+          "ObstaclesCritic",
         ]
       ObstaclesCritic:
         enabled: true
@@ -192,20 +191,20 @@ controller_server:
         enabled: true
         cost_power: 1
         cost_weight: 5.0
-        threshold_to_consider: 1.4
+        threshold_to_consider: 1.5
       GoalAngleCritic:
         enabled: true
-        cost_weight: 3.0
-        cost_power: 2
+        cost_weight: 5.0
+        cost_power: 1
         threshold_to_consider: 1.5
-        symmetric_yaw_tolerance: true
+        symmetric_yaw_tolerance: false
       PathAlignCritic:
         enabled: true
         cost_power: 1
         cost_weight: 14.0
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 4
-        threshold_to_consider: 0.5
+        threshold_to_consider: 1.5
         offset_from_furthest: 20
         use_path_orientations: false
       PathFollowCritic:
@@ -215,17 +214,17 @@ controller_server:
         offset_from_furthest: 5
         threshold_to_consider: 1.5
       PathAngleCritic:
-        enabled: false
+        enabled: true
         cost_power: 1
-        cost_weight: 2.0
+        cost_weight: 1.0
         offset_from_furthest: 4
-        threshold_to_consider: 0.5
+        threshold_to_consider: 1.5
         max_angle_to_furthest: 1.0
         mode: 0
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 4.0
+        cost_weight: 3.81
         critical_cost: 300.0
         consider_footprint: false
         collision_cost: 1000000.0
@@ -263,7 +262,7 @@ local_costmap:
       publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_footprint
-      use_sim_time: true
+      use_sim_time: false
       rolling_window: true
       width: 3
       height: 3
@@ -306,7 +305,7 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
-      use_sim_time: true
+      use_sim_time: false
       robot_radius: 0.15
       resolution: 0.05
       track_unknown_space: true
@@ -336,7 +335,7 @@ global_costmap:
 
 map_server:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
     yaml_filename: ""
@@ -349,7 +348,7 @@ map_server:
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
-    use_sim_time: true
+    use_sim_time: false
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
@@ -388,11 +387,7 @@ behavior_server:
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
     behavior_plugins:
-      ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
-    spin:
-      plugin: "nav2_behaviors::Spin"
-    backup:
-      plugin: "nav2_behaviors::BackUp"
+      ["drive_on_heading", "assisted_teleop", "wait"]
     drive_on_heading:
       plugin: "nav2_behaviors::DriveOnHeading"
     wait:
@@ -402,7 +397,7 @@ behavior_server:
     global_frame: odom
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
-    use_sim_time: true
+    use_sim_time: false
     simulate_ahead_time: 2.0
     max_rotational_vel: 3.0
     min_rotational_vel: 1.8
@@ -410,11 +405,11 @@ behavior_server:
 
 robot_state_publisher:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 waypoint_follower:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     loop_rate: 20
     stop_on_failure: false
     waypoint_task_executor_plugin: "wait_at_waypoint"
@@ -425,7 +420,7 @@ waypoint_follower:
 
 velocity_smoother:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
@@ -442,17 +437,17 @@ velocity_smoother:
 
 collision_monitor:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     base_frame_id: base_footprint
     odom_frame_id: odom
-    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_in_topic: "/cmd_vel_controller"
     cmd_vel_out_topic: "/cmd_vel_nav"
     observation_sources: ["scan"]
 
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonStop:
       type: "circle"
-      radius: 0.32
+      radius: 0.35
       action_type: "stop"
       min_points: 4
       visualize: true
