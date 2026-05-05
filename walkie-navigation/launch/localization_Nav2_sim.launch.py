@@ -14,9 +14,15 @@ def generate_launch_description():
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
-        "nav2_RPP_walkie_sim_params.yaml",
+        "nav2_mppi_walkie_sim_params.yaml",
     )
-
+    bt_xml_path = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "config",
+        "nav2",
+        "behavior_tree",
+        "nav_topose_no_spin_backup_bt.xml",
+    )
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_yaml_file = LaunchConfiguration("map")
@@ -51,6 +57,7 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "map": map_yaml_file,
             "params_file": nav2_config,
+            "default_nav_to_pose_bt_xml": bt_xml_path,
         }.items(),
     )
     # Create launch description

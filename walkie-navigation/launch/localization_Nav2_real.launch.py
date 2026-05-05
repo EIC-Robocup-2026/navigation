@@ -17,6 +17,13 @@ def generate_launch_description():
         "nav2",
         "nav2_mppi_walkie_real_param.yaml",
     )
+    bt_xml_path = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "config",
+        "nav2",
+        "behavior_tree",
+        "nav_to_pose_real_recovery_bt.xml",
+    )
 
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -25,7 +32,7 @@ def generate_launch_description():
 
     default_map = (
         get_package_share_directory("robot_navigation")
-        + "/map/9_091125_Walkie_EIC_slam_toolbox/map.yaml"
+        + "/map/13_12042026_eic_room/map.yaml"
     )
 
     # Declare launch arguments
@@ -45,15 +52,27 @@ def generate_launch_description():
         description="Full path to the nav2 config YAML file",
     )
 
-    # Include navigation launch file
-    nav2_bringup_launch = IncludeLaunchDescription(
+    # Include localization launch file (handles AMCL and Map Server)
+    localization_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "bringup_launch.py")
+            os.path.join(bringup_dir, "launch", "localization_launch.py")
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
             "map": map_yaml_file,
             "params_file": nav2_config,
+        }.items(),
+    )
+
+    # Include navigation launch file (handles BT Navigator, Controller, Planner, etc.)
+    navigation_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(bringup_dir, "launch", "navigation_launch.py")
+        ),
+        launch_arguments={
+            "use_sim_time": use_sim_time,
+            "params_file": nav2_config,
+            "default_nav_to_pose_bt_xml": bt_xml_path,
         }.items(),
     )
 
@@ -64,6 +83,9 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
-    ld.add_action(nav2_bringup_launch)
+
+    # Add the separated launch files
+    ld.add_action(localization_launch)
+    ld.add_action(navigation_launch)
 
     return ld
