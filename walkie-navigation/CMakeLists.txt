@@ -57,6 +57,7 @@ install(PROGRAMS
 )
 install(PROGRAMS
   robot_navigation/current_pose_publisher.py
+  robot_navigation/pointcloud_self_filter_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
