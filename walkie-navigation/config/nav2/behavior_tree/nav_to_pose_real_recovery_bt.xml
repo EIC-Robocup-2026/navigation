@@ -1,63 +1,108 @@
 <root BTCPP_format="4" main_tree_to_execute="WalkieNavigateToPoseWReplanningAndRecoveryNoSpin">
   <BehaviorTree ID="WalkieNavigateToPoseWReplanningAndRecoveryNoSpin">
-    
-    <RecoveryNode number_of_retries="6" name="NavigateRecovery">
-      
+
+    <!--
+      Recovery strategy for real robot with STVL 3-D obstacles.
+
+      RecoveryNode mechanics (key to understanding this tree):
+        - If recovery child returns SUCCESS  → RecoveryNode retries the navigation child
+        - If recovery child returns FAILURE  → RecoveryNode fails *immediately*, no retry
+
+      RecoveryFallback logic:
+        1. GoalUpdated             → SUCCESS if a new goal arrived    → retry with new goal
+        2. Sequence(
+             Inverter(IsGoalNearby) → FAILURE  when near goal         → Sequence FAILS
+                                    → FAILURE  propagates out of Fallback
+                                    → RecoveryNode aborts immediately  → robot stops
+             Wait 5s               → runs only when NOT near goal
+           )                       → SUCCESS after 5 s                → RecoveryNode retries
+                                     (dynamic-object voxels may have decayed during wait)
+
+      Inner recovery gates (WouldA…RecoveryHelp):
+        - SUCCESS → error is transient; wait and retry once
+        - FAILURE → error is unrecoverable (real obstacle); fail instantly, no wait
+    -->
+
+    <RecoveryNode number_of_retries="3" name="NavigateRecovery">
+
       <PipelineSequence name="NavigateWithReplanning">
         <ProgressCheckerSelector selected_progress_checker="{selected_progress_checker}" default_progress_checker="progress_checker" topic_name="progress_checker_selector"/>
         <GoalCheckerSelector selected_goal_checker="{selected_goal_checker}" default_goal_checker="general_goal_checker" topic_name="goal_checker_selector"/>
         <PathHandlerSelector selected_path_handler="{selected_path_handler}" default_path_handler="PathHandler" topic_name="path_handler_selector"/>
         <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
         <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
-        
+
         <RateController hz="1.0">
           <RecoveryNode number_of_retries="1" name="ComputePathToPose">
             <Fallback name="PlannerLogic">
               <ReactiveSequence name="CheckIfNewPathNeeded">
                 <Inverter><GlobalUpdatedGoal/></Inverter>
                 <IsGoalNearby path="{path}" proximity_threshold="4.0" max_robot_pose_search_dist="1.5"/>
-                <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0" />
+                <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0"/>
                 <ValidatePath path="{remaining_path}"/>
               </ReactiveSequence>
               <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
             </Fallback>
+            <!--
+              Near goal: fail immediately — no 6 s wait, no costmap changes.
+              Far from goal: wait 6 s (> voxel_decay 5 s) so dynamic objects passively decay.
+            -->
             <Sequence>
+              <Inverter>
+                <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+              </Inverter>
               <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-              <ClearEntireCostmap name="ClearGlobalCostmap-Context" service_name="global_costmap/clear_entirely_global_costmap"/>
+              <Wait wait_duration="6.0"/>
             </Sequence>
           </RecoveryNode>
         </RateController>
 
         <RecoveryNode number_of_retries="1" name="FollowPath">
           <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+          <!--
+            Near goal: skip the retry entirely — no second MPPI run, no more sideways movement.
+            Sequence fails immediately → RecoveryNode fails → PipelineSequence fails
+            → outer RecoveryFallback fires → IsGoalNearby check → abort.
+            Far from goal: check if recovery would help, then wait 2 s and retry once.
+          -->
           <Sequence>
+            <Inverter>
+              <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+            </Inverter>
             <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-            <ClearEntireCostmap name="ClearLocalCostmap-Context" service_name="local_costmap/clear_entirely_local_costmap"/>
+            <Wait wait_duration="2.0"/>
           </Sequence>
         </RecoveryNode>
-                
+
       </PipelineSequence>
-      
+
+      <!--
+        RecoveryFallback — controls whether NavigateRecovery retries or aborts:
+
+          GoalUpdated → new goal arrived → SUCCESS → retry with new goal
+
+          Sequence(Inverter(IsGoalNearby), Wait 5s):
+            • Robot IS near goal (≤ 1.5 m):
+                Inverter(IsGoalNearby) = FAILURE → Sequence = FAILURE
+                → Fallback has nothing left → FAILURE
+                → RecoveryNode aborts immediately  ← robot stops near goal ✓
+
+            • Robot is FAR from goal:
+                Inverter(IsGoalNearby) = SUCCESS → Wait 5s runs
+                (during this 5 s, dynamic-object voxels at 5 s decay time expire)
+                → Wait succeeds → Sequence = SUCCESS → Fallback = SUCCESS
+                → RecoveryNode retries navigation  ← dynamic obstacle may be gone ✓
+      -->
       <ReactiveFallback name="RecoveryFallback">
         <GoalUpdated/>
-        <Fallback name="GlobalRecoveryFallback">
-            
-          <Sequence name="WaitNearGoal">
-            <IsGoalNearby path="{path}" proximity_threshold="2.0" max_robot_pose_search_dist="1.5"/>
-            <Wait wait_duration="10.0"/>
-            <ClearEntireCostmap name="ClearLocal" service_name="local_costmap/clear_entirely_local_costmap"/>
-            <ClearEntireCostmap name="ClearGlobal" service_name="global_costmap/clear_entirely_global_costmap"/>
-          </Sequence>
-          
-          <Sequence name="InstantRetryFar">
-            <ClearEntireCostmap name="ClearLocal" service_name="local_costmap/clear_entirely_local_costmap"/>
-            <ClearEntireCostmap name="ClearGlobal" service_name="global_costmap/clear_entirely_global_costmap"/>
-            <Wait wait_duration="3.0"/> 
-          </Sequence>
-            
-        </Fallback>
+        <Sequence name="RetryOnlyIfFarFromGoal">
+          <Inverter>
+            <IsGoalNearby path="{path}" proximity_threshold="1.0" max_robot_pose_search_dist="1.5"/>
+          </Inverter>
+          <Wait wait_duration="5.0"/>
+        </Sequence>
       </ReactiveFallback>
-      
+
     </RecoveryNode>
   </BehaviorTree>
 </root>
