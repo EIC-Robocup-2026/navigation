@@ -9,9 +9,13 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(slam_toolbox REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(rclcpp_action REQUIRED)
 find_package(nav2_msgs REQUIRED)
+find_package(nav2_behavior_tree REQUIRED)
+find_package(nav2_ros_common REQUIRED)
+find_package(behaviortree_cpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -26,7 +30,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   DEPENDENCIES geometry_msgs
 )
 
-add_executable(Sgoal_Service_node robot_navigation/SgoalService.cpp) 
+add_executable(Sgoal_Service_node robot_navigation/SgoalService.cpp)
 
 ament_target_dependencies(Sgoal_Service_node
   rclcpp
@@ -43,9 +47,33 @@ ament_target_dependencies(Sgoal_Service_node
 rosidl_target_interfaces(Sgoal_Service_node
   ${PROJECT_NAME} "rosidl_typesupport_cpp")
 
+# BT plugin: AdjustGoalToCostmap
+add_library(adjust_goal_to_costmap_bt_node SHARED
+  robot_navigation/AdjustGoalToCostmapAction.cpp
+)
+
+ament_target_dependencies(adjust_goal_to_costmap_bt_node
+  rclcpp
+  rclcpp_lifecycle
+  nav2_behavior_tree
+  nav2_ros_common
+  behaviortree_cpp
+  nav2_msgs
+  geometry_msgs
+  nav_msgs
+  tf2
+  tf2_geometry_msgs
+)
+
 install(TARGETS
   Sgoal_Service_node
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(TARGETS adjust_goal_to_costmap_bt_node
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
 )
 
 # Install Python robot_navigation

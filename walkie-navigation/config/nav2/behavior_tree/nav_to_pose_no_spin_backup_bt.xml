@@ -1,5 +1,8 @@
 <root BTCPP_format="4" main_tree_to_execute="NavigateToPoseWReplanningAndRecoveryNoSpin">
   <BehaviorTree ID="NavigateToPoseWReplanningAndRecoveryNoSpin">
+    <Sequence name="AdjustThenNavigate">
+      <AdjustGoalToCostmap goal="{goal}" output_goal="{goal}"
+        cost_threshold="50" max_search_radius="2.0"/>
     <RecoveryNode number_of_retries="6" name="NavigateRecovery">
       <PipelineSequence name="NavigateWithReplanning">
         <ProgressCheckerSelector selected_progress_checker="{selected_progress_checker}" default_progress_checker="progress_checker" topic_name="progress_checker_selector"/>
@@ -51,5 +54,6 @@
         </ReactiveFallback>
       </Sequence>
     </RecoveryNode>
+    </Sequence>
   </BehaviorTree>
 </root>
