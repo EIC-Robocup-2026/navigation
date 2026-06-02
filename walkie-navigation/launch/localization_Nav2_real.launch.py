@@ -32,7 +32,7 @@ def generate_launch_description():
 
     default_map = (
         get_package_share_directory("robot_navigation")
-        + "/map/14_20052026_eng4_floor20_01/eng4_20_20052026.yaml"
+        + "/map/17_30052026_ChulaPat14_4/map.yaml"
     )
 
     # Declare launch arguments
