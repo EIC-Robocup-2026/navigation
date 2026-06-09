@@ -18,6 +18,11 @@ find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+# For the ComputeGoalHeadingSpin behavior-tree plugin
+find_package(behaviortree_cpp REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(nav2_util REQUIRED)
+find_package(nav2_ros_common REQUIRED)
 
 
 # Generate the Services
@@ -48,6 +53,44 @@ install(TARGETS
   DESTINATION lib/${PROJECT_NAME}
 )
 
+# ComputeGoalHeadingSpin BT plugin — loaded by bt_navigator via plugin_lib_names.
+# Installed to lib/ so the BT factory finds it on the library path.
+add_library(compute_goal_heading_spin_bt_node SHARED
+  robot_navigation/compute_goal_heading_spin.cpp)
+target_compile_definitions(compute_goal_heading_spin_bt_node PRIVATE BT_PLUGIN_EXPORT)
+ament_target_dependencies(compute_goal_heading_spin_bt_node
+  behaviortree_cpp
+  geometry_msgs
+  nav2_util
+  nav2_ros_common
+  rclcpp
+  tf2_ros
+)
+install(TARGETS compute_goal_heading_spin_bt_node
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+# ComputeGoalBearingSpin BT plugin — spins the base to face the goal *position*
+# (so the tilt-only head can mark the obstacle) before the STVL freeze.
+add_library(compute_goal_bearing_spin_bt_node SHARED
+  robot_navigation/compute_goal_bearing_spin.cpp)
+target_compile_definitions(compute_goal_bearing_spin_bt_node PRIVATE BT_PLUGIN_EXPORT)
+ament_target_dependencies(compute_goal_bearing_spin_bt_node
+  behaviortree_cpp
+  geometry_msgs
+  nav2_util
+  nav2_ros_common
+  rclcpp
+  tf2_ros
+)
+install(TARGETS compute_goal_bearing_spin_bt_node
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 # Install Python robot_navigation
 install(PROGRAMS
   robot_navigation/human_follower_node.py
@@ -58,6 +101,8 @@ install(PROGRAMS
 install(PROGRAMS
   robot_navigation/current_pose_publisher.py
   robot_navigation/pointcloud_self_filter_node.py
+  robot_navigation/stvl_decay_manager_node.py
+  robot_navigation/head_tilt_near_goal_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

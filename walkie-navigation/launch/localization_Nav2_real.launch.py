@@ -76,6 +76,26 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Tilt the ZED head down near the goal so tabletop obstacles stay in the
+    # camera FOV at close range (live marking) instead of dropping into the blind
+    # spot. Replaces the old STVL freeze + near-goal stop.
+    head_tilt_near_goal = Node(
+        package="robot_navigation",
+        executable="head_tilt_near_goal_node.py",
+        name="head_tilt_near_goal",
+        output="screen",
+        parameters=[
+            {
+                "use_sim_time": use_sim_time,
+                "head_command_topic": "/head_servo_controller/commands",
+                "near_distance": 1.5,
+                "far_distance": 1.7,
+                "default_angle": 0.25,
+                "down_angle": 0.785,
+            }
+        ],
+    )
+
     # Create launch description
     ld = LaunchDescription()
 
@@ -87,5 +107,6 @@ def generate_launch_description():
     # Add the separated launch files
     ld.add_action(localization_launch)
     ld.add_action(navigation_launch)
+    ld.add_action(head_tilt_near_goal)
 
     return ld

@@ -21,60 +21,80 @@
       Inner recovery gates (WouldA…RecoveryHelp):
         - SUCCESS → error is transient; wait and retry once
         - FAILURE → error is unrecoverable (real obstacle); fail instantly, no wait
+
+      Near-goal tabletop blind spot:
+        - At close range the table leaves the camera/lidar FOV. Instead of
+          stopping and freezing the costmap, the head-tilt manager
+          (head_tilt_near_goal_node.py) pitches the ZED down near the goal so the
+          obstacle stays in view and STVL keeps marking it live.
     -->
 
-    <RecoveryNode number_of_retries="3" name="NavigateRecovery">
+    <!--
+      Top-level wrapper. If the whole navigation fails (e.g. a goal commanded
+      inside a table is unreachable and aborts), rotate in place to face the
+      goal's commanded heading, then deliberately fail (AlwaysFailure) so the
+      action still reports ABORT — we only added a heading match before aborting.
+    -->
+    <Fallback name="NavigateOrFaceGoalHeading">
 
-      <PipelineSequence name="NavigateWithReplanning">
-        <ProgressCheckerSelector selected_progress_checker="{selected_progress_checker}" default_progress_checker="progress_checker" topic_name="progress_checker_selector"/>
-        <GoalCheckerSelector selected_goal_checker="{selected_goal_checker}" default_goal_checker="general_goal_checker" topic_name="goal_checker_selector"/>
-        <PathHandlerSelector selected_path_handler="{selected_path_handler}" default_path_handler="PathHandler" topic_name="path_handler_selector"/>
-        <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
-        <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
+    <RecoveryNode number_of_retries="5" name="NavigateRecovery">
 
-        <RateController hz="1.0">
-          <RecoveryNode number_of_retries="1" name="ComputePathToPose">
-            <Fallback name="PlannerLogic">
-              <ReactiveSequence name="CheckIfNewPathNeeded">
-                <Inverter><GlobalUpdatedGoal/></Inverter>
-                <IsGoalNearby path="{path}" proximity_threshold="4.0" max_robot_pose_search_dist="1.5"/>
-                <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0"/>
-                <ValidatePath path="{remaining_path}"/>
-              </ReactiveSequence>
-              <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-            </Fallback>
-            <!--
-              Near goal: fail immediately — no 6 s wait, no costmap changes.
-              Far from goal: wait 6 s (> voxel_decay 5 s) so dynamic objects passively decay.
-            -->
-            <Sequence>
-              <Inverter>
-                <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
-              </Inverter>
-              <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-              <Wait wait_duration="6.0"/>
-            </Sequence>
-          </RecoveryNode>
-        </RateController>
+        <PipelineSequence name="NavigateWithReplanning">
+          <ProgressCheckerSelector selected_progress_checker="{selected_progress_checker}" default_progress_checker="progress_checker" topic_name="progress_checker_selector"/>
+          <GoalCheckerSelector selected_goal_checker="{selected_goal_checker}" default_goal_checker="general_goal_checker" topic_name="goal_checker_selector"/>
+          <PathHandlerSelector selected_path_handler="{selected_path_handler}" default_path_handler="PathHandler" topic_name="path_handler_selector"/>
+          <ControllerSelector selected_controller="{selected_controller}" default_controller="FollowPath" topic_name="controller_selector"/>
+          <PlannerSelector selected_planner="{selected_planner}" default_planner="GridBased" topic_name="planner_selector"/>
 
-        <RecoveryNode number_of_retries="1" name="FollowPath">
-          <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+          <RateController hz="1.0">
+            <RecoveryNode number_of_retries="2" name="ComputePathToPose">
+              <Fallback name="PlannerLogic">
+                <ReactiveSequence name="CheckIfNewPathNeeded">
+                  <Inverter><GlobalUpdatedGoal/></Inverter>
+                  <IsGoalNearby path="{path}" proximity_threshold="4.0" max_robot_pose_search_dist="1.5"/>
+                  <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0"/>
+                  <ValidatePath path="{remaining_path}"/>
+                </ReactiveSequence>
+                <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
+              </Fallback>
+              <!--
+                Near goal: fail immediately — no 6 s wait, no costmap changes.
+                Far from goal: wait 6 s (> voxel_decay 5 s) so dynamic objects passively decay.
+              -->
+              <Sequence>
+                <Inverter>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+                </Inverter>
+                <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
+                <Wait wait_duration="6.0"/>
+              </Sequence>
+            </RecoveryNode>
+          </RateController>
+
           <!--
-            Near goal: skip the retry entirely — no second MPPI run, no more sideways movement.
-            Sequence fails immediately → RecoveryNode fails → PipelineSequence fails
-            → outer RecoveryFallback fires → IsGoalNearby check → abort.
-            Far from goal: check if recovery would help, then wait 2 s and retry once.
+            FollowPath. The near-goal stop + STVL freeze + face-goal spin were
+            removed: instead the head-tilt manager pitches the ZED down near the
+            goal so the tabletop obstacle stays in view (live marking, no freeze,
+            no stop).
           -->
-          <Sequence>
-            <Inverter>
-              <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
-            </Inverter>
-            <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-            <Wait wait_duration="2.0"/>
-          </Sequence>
-        </RecoveryNode>
+          <RecoveryNode number_of_retries="2" name="FollowPath">
+              <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+              <!--
+                Near goal: skip the retry entirely — no second MPPI run, no more sideways movement.
+                Sequence fails immediately → RecoveryNode fails → PipelineSequence fails
+                → outer RecoveryFallback fires → IsGoalNearby check → abort.
+                Far from goal: check if recovery would help, then wait 2 s and retry once.
+              -->
+              <Sequence>
+                <Inverter>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+                </Inverter>
+                <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
+                <Wait wait_duration="2.0"/>
+              </Sequence>
+            </RecoveryNode>
 
-      </PipelineSequence>
+        </PipelineSequence>
 
       <!--
         RecoveryFallback — controls whether NavigateRecovery retries or aborts:
@@ -82,7 +102,7 @@
           GoalUpdated → new goal arrived → SUCCESS → retry with new goal
 
           Sequence(Inverter(IsGoalNearby), Wait 5s):
-            • Robot IS near goal (≤ 1.5 m):
+            • Robot IS near goal (≤ 0.8 m):
                 Inverter(IsGoalNearby) = FAILURE → Sequence = FAILURE
                 → Fallback has nothing left → FAILURE
                 → RecoveryNode aborts immediately  ← robot stops near goal ✓
@@ -97,12 +117,21 @@
         <GoalUpdated/>
         <Sequence name="RetryOnlyIfFarFromGoal">
           <Inverter>
-            <IsGoalNearby path="{path}" proximity_threshold="1.0" max_robot_pose_search_dist="1.5"/>
+            <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
           </Inverter>
           <Wait wait_duration="5.0"/>
         </Sequence>
       </ReactiveFallback>
 
     </RecoveryNode>
+
+      <!-- Runs only if NavigateRecovery failed (goal aborted). -->
+      <Sequence name="FaceGoalHeadingThenAbort">
+        <ComputeGoalHeadingSpin goal="{goal}" spin_dist="{spin_dist}"/>
+        <Spin spin_dist="{spin_dist}"/>
+        <AlwaysFailure/>
+      </Sequence>
+
+    </Fallback>
   </BehaviorTree>
 </root>
