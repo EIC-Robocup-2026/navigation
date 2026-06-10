@@ -49,6 +49,11 @@ def generate_launch_description():
         default_value="true",
         description="Launch RViz",
     )
+    declare_nav_debug = DeclareLaunchArgument(
+        "nav_debug",
+        default_value="false",
+        description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
+    )
 
     walkie_urdf = os.path.join(description_pkg, "robots", "gz_walkie.urdf.xacro")
 
@@ -121,6 +126,20 @@ def generate_launch_description():
         }.items(),
     )
 
+    # Object approach-pose action server (/navigate_to_object -> Nav2).
+    # No AMCL in loopback sim; the commander falls back to TF for robot pose.
+    nav_commander = Node(
+        package="robot_navigation",
+        executable="nav_commander.py",
+        name="nav_commander",
+        output="screen",
+        parameters=[
+            os.path.join(nav_pkg, "config", "walkie_nav.yaml"),
+            {"use_sim_time": True,
+             "debug": LaunchConfiguration("nav_debug")},
+        ],
+    )
+
     rviz = Node(
         condition=IfCondition(use_rviz),
         package="rviz2",
@@ -135,6 +154,7 @@ def generate_launch_description():
     ld.add_action(declare_map)
     ld.add_action(declare_nav2_config)
     ld.add_action(declare_use_rviz)
+    ld.add_action(declare_nav_debug)
 
     ld.add_action(robot_state_publisher)
     ld.add_action(joint_state_publisher)
@@ -142,6 +162,7 @@ def generate_launch_description():
     ld.add_action(map_server)
     ld.add_action(map_lifecycle_manager)
     ld.add_action(nav2_navigation)
+    ld.add_action(nav_commander)
     ld.add_action(rviz)
 
     return ld

@@ -24,6 +24,11 @@ def generate_launch_description():
         "behavior_tree",
         "nav_to_pose_real_recovery_bt.xml",
     )
+    walkie_nav_config = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "config",
+        "walkie_nav.yaml",
+    )
 
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
@@ -50,6 +55,12 @@ def generate_launch_description():
         "nav2_config",
         default_value=default_nav2_config,
         description="Full path to the nav2 config YAML file",
+    )
+
+    declare_nav_debug_cmd = DeclareLaunchArgument(
+        "nav_debug",
+        default_value="false",
+        description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
     )
 
     # Include localization launch file (handles AMCL and Map Server)
@@ -96,6 +107,19 @@ def generate_launch_description():
         ],
     )
 
+    # Object approach-pose action server (/navigate_to_object -> Nav2)
+    nav_commander = Node(
+        package="robot_navigation",
+        executable="nav_commander.py",
+        name="nav_commander",
+        output="screen",
+        parameters=[
+            walkie_nav_config,
+            {"use_sim_time": use_sim_time,
+             "debug": LaunchConfiguration("nav_debug")},
+        ],
+    )
+
     # Create launch description
     ld = LaunchDescription()
 
@@ -103,10 +127,12 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
+    ld.add_action(declare_nav_debug_cmd)
 
     # Add the separated launch files
     ld.add_action(localization_launch)
     ld.add_action(navigation_launch)
     ld.add_action(head_tilt_near_goal)
+    ld.add_action(nav_commander)
 
     return ld

@@ -18,6 +18,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
+find_package(action_msgs REQUIRED)
 # For the ComputeGoalHeadingSpin behavior-tree plugin
 find_package(behaviortree_cpp REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -25,10 +26,11 @@ find_package(nav2_util REQUIRED)
 find_package(nav2_ros_common REQUIRED)
 
 
-# Generate the Services
+# Generate the Services and Actions
 rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/MoveRobot.srv"
-  DEPENDENCIES geometry_msgs
+  "action/NavigateToObject.action"
+  DEPENDENCIES geometry_msgs action_msgs
 )
 
 add_executable(Sgoal_Service_node robot_navigation/SgoalService.cpp) 
@@ -95,7 +97,6 @@ install(TARGETS compute_goal_bearing_spin_bt_node
 install(PROGRAMS
   robot_navigation/human_follower_node.py
   robot_navigation/accel_stamp_node.py
-  robot_navigation/goPose_Backend.py
   DESTINATION lib/${PROJECT_NAME}
 )
 install(PROGRAMS
@@ -103,6 +104,14 @@ install(PROGRAMS
   robot_navigation/pointcloud_self_filter_node.py
   robot_navigation/stvl_decay_manager_node.py
   robot_navigation/head_tilt_near_goal_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+# nav_commander imports approach_pose/costmap_reader as sibling modules, so
+# all three must land in the same lib/${PROJECT_NAME} directory.
+install(PROGRAMS
+  robot_navigation/nav_commander.py
+  robot_navigation/approach_pose.py
+  robot_navigation/costmap_reader.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -121,11 +130,12 @@ endif()
 
 # Install launch files
 install(
-  DIRECTORY 
+  DIRECTORY
     launch
     config
     map
     srv
+    action
   DESTINATION share/${PROJECT_NAME}/
 )
 
