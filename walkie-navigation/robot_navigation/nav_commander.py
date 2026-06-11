@@ -5,14 +5,20 @@ The table edge is only marked into the LOCAL costmap (STVL from the ZED head
 camera), and only once the camera actually sees the table. So navigation is
 two-phase:
 
-  1. face_target — walk to a standoff point on the robot->object line, facing
-     the object, so the camera brings the table edge into the costmap.
-  2. nearest_edge — re-run the PCA edge fit on the now-populated local
-     costmap and refine position + heading to be perpendicular to the edge,
-     directly in front of the object.
+  1. approach — walk to a standoff point near the object. The pose is
+     grounded by the planner first: ComputePathToPose plans to the geometric
+     standoff point, the path's last pose becomes the goal position (NavFn's
+     tolerance may snap an unreachable point to the nearest plannable one),
+     and the yaw is set to face the object from there. While driving, once
+     the robot is within refine_trigger_distance of the goal and roughly
+     facing the object, the PCA edge fit is attempted on the local costmap.
+  2. nearest_edge — as soon as the fit succeeds (usually mid-approach; phase
+     1 is canceled), navigate to the refined pose: directly in front of the
+     object, heading perpendicular into the table edge.
 
-Phase 1 is skipped when the edge is already visible at goal time. The local
-costmap lives in the odom frame, so the PCA runs in odom and the result is
+Phase 1 is skipped when the edge is already visible at goal time, and the
+PCA is retried on arrival if it never triggered mid-drive. The local costmap
+lives in the odom frame, so the PCA runs in odom and the result is
 transformed back to map before being sent to Nav2.
 
 RViz integration: the "Publish Point" tool (/clicked_point) places an object
@@ -21,6 +27,7 @@ and can be toggled at runtime with `ros2 param set /nav_commander debug true`.
 """
 
 import math
+import time
 
 import rclpy
 from action_msgs.msg import GoalStatus
@@ -31,7 +38,7 @@ from rclpy.executors import ExternalShutdownException, MultiThreadedExecutor
 from rclpy.node import Node
 
 from geometry_msgs.msg import Point, PointStamped, PoseStamped
-from nav2_msgs.action import NavigateToPose
+from nav2_msgs.action import ComputePathToPose, NavigateToPose
 from std_msgs.msg import ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 from robot_navigation.action import NavigateToObject
@@ -54,12 +61,20 @@ class NavCommander(Node):
         self.declare_parameter('inflation_radius', 0.30)
         self.declare_parameter('search_radius', 1.20)
         self.declare_parameter('min_occupied_cells', 5)
-        self.declare_parameter('front_edge_tolerance', 0.25)
+        self.declare_parameter('edge_fit_radius', 0.4)
+        self.declare_parameter('edge_inlier_dist', 0.10)
         self.declare_parameter('default_method', 'nearest_edge')
         self.declare_parameter('fallback_method', 'face_target')
         self.declare_parameter('two_phase', True)
         self.declare_parameter('refine_position_tolerance', 0.08)
         self.declare_parameter('refine_yaw_tolerance_deg', 8.0)
+        # Mid-approach refinement: once within this distance of the phase-1
+        # goal AND roughly facing the object, run the PCA and switch to the
+        # edge-aligned pose without waiting for phase 1 to finish.
+        self.declare_parameter('refine_trigger_distance', 0.4)
+        self.declare_parameter('refine_trigger_yaw_deg', 30.0)
+        self.declare_parameter('planner_id', 'GridBased')
+        self.declare_parameter('compute_path_action', 'compute_path_to_pose')
         self.declare_parameter('costmap_topic', '/local_costmap/costmap')
         self.declare_parameter('robot_pose_topic', '/amcl_pose')
         self.declare_parameter('clicked_point_topic', '/clicked_point')
@@ -76,14 +91,19 @@ class NavCommander(Node):
             'inflation_radius': self.get_parameter('inflation_radius').value,
             'search_radius': self.get_parameter('search_radius').value,
             'min_occupied_cells': self.get_parameter('min_occupied_cells').value,
-            'front_edge_tolerance': self.get_parameter('front_edge_tolerance').value,
+            'edge_fit_radius': self.get_parameter('edge_fit_radius').value,
+            'edge_inlier_dist': self.get_parameter('edge_inlier_dist').value,
         }
         self._default_method = self.get_parameter('default_method').value
         self._two_phase = self.get_parameter('two_phase').value
         self._refine_pos_tol = self.get_parameter('refine_position_tolerance').value
         self._refine_yaw_tol = math.radians(
             self.get_parameter('refine_yaw_tolerance_deg').value)
+        self._refine_trigger_dist = self.get_parameter('refine_trigger_distance').value
+        self._refine_trigger_yaw = math.radians(
+            self.get_parameter('refine_trigger_yaw_deg').value)
         self._global_frame = self.get_parameter('global_frame').value
+        self._planner_id = self.get_parameter('planner_id').value
 
         self._costmap_reader = CostmapReader(
             self,
@@ -114,6 +134,12 @@ class NavCommander(Node):
         self._nav_client = ActionClient(
             self, NavigateToPose,
             self.get_parameter('navigate_to_pose_action').value,
+            callback_group=self._cb_group)
+        # Used to ground the phase-1 pose: plan to the geometric standoff
+        # point, take the path's last pose, face the object from there.
+        self._path_client = ActionClient(
+            self, ComputePathToPose,
+            self.get_parameter('compute_path_action').value,
             callback_group=self._cb_group)
         self._action_server = ActionServer(
             self, NavigateToObject, action_name,
@@ -199,44 +225,124 @@ class NavCommander(Node):
         self._publish_debug_markers(self._global_frame)
         return pose
 
-    async def _navigate(self, goal_handle, pose):
-        """Send one pose to Nav2 and await the outcome. Returns (ok, msg)."""
+    async def _ground_phase1_pose(self, pose, ox, oy):
+        """Ground the geometric standoff pose with the planner: plan to it,
+        move the goal to the path's last pose (NavFn tolerance may have
+        snapped an unreachable point to the nearest plannable one), and face
+        the object from that actual position. Returns the pose unchanged
+        when planning is unavailable or fails — its yaw already faces the
+        object from the geometric point."""
+        if not self._path_client.server_is_ready():
+            self.get_logger().warn(
+                'compute_path_to_pose not available, using geometric pose')
+            return pose
+        path_goal = ComputePathToPose.Goal()
+        path_goal.goal = pose
+        path_goal.planner_id = self._planner_id
+        path_goal.use_start = False
+        handle = await self._path_client.send_goal_async(path_goal)
+        if not handle.accepted:
+            return pose
+        result = await handle.get_result_async()
+        if (result.status != GoalStatus.STATUS_SUCCEEDED
+                or len(result.result.path.poses) == 0):
+            self.get_logger().warn(
+                'Phase-1 path planning failed, using geometric pose')
+            return pose
+        end = result.result.path.poses[-1].pose.position
+        if math.hypot(ox - end.x, oy - end.y) < 1e-3:
+            return pose
+        yaw = math.atan2(oy - end.y, ox - end.x)
+        self.get_logger().info(
+            f'Phase-1 pose grounded by planner: path end '
+            f'({end.x:.3f}, {end.y:.3f}), heading to object '
+            f'{math.degrees(yaw):.1f} deg')
+        return ApproachPoseComputer._build_pose_stamped(end.x, end.y, yaw)
+
+    async def _navigate(self, goal_handle, pose, refine_check=None):
+        """Send one pose to Nav2 and await the outcome.
+
+        refine_check(feedback) may return a better pose mid-drive; when it
+        does, this navigation is canceled and the pose is handed back to the
+        caller.
+
+        Returns (ok, msg, refined_pose).
+        """
         yaw = _yaw_from_quaternion(pose.pose.orientation)
         self.get_logger().info(
             f'Navigating to x={pose.pose.position.x:.3f}, '
             f'y={pose.pose.position.y:.3f}, yaw={math.degrees(yaw):.1f} deg')
 
         if not self._nav_client.server_is_ready():
-            return False, 'Nav2 action server not available'
+            return False, 'Nav2 action server not available', None
 
         pose.header.stamp = self.get_clock().now().to_msg()
         self._approach_pose_pub.publish(pose)
         nav_goal = NavigateToPose.Goal()
         nav_goal.pose = pose
 
+        state = {'handle': None, 'refined': None, 'last_try': 0.0}
+
         def _feedback_cb(fb_msg):
+            fb = fb_msg.feedback
             feedback = NavigateToObject.Feedback()
-            feedback.distance_remaining = fb_msg.feedback.distance_remaining
+            feedback.distance_remaining = fb.distance_remaining
             goal_handle.publish_feedback(feedback)
+
+            if refine_check is None or state['refined'] is not None:
+                return
+            now = time.monotonic()
+            if now - state['last_try'] < 0.5:  # throttle PCA attempts
+                return
+            state['last_try'] = now
+            refined = refine_check(fb)
+            if refined is not None:
+                state['refined'] = refined
+                self.get_logger().info(
+                    'Edge alignment found mid-approach, canceling phase 1')
+                if state['handle'] is not None:
+                    state['handle'].cancel_goal_async()
 
         nav_goal_handle = await self._nav_client.send_goal_async(
             nav_goal, feedback_callback=_feedback_cb)
         if not nav_goal_handle.accepted:
-            return False, 'Nav2 rejected the goal'
+            return False, 'Nav2 rejected the goal', None
+        state['handle'] = nav_goal_handle
+        if state['refined'] is not None:  # refine fired before handle was set
+            nav_goal_handle.cancel_goal_async()
+
         nav_result = await nav_goal_handle.get_result_async()
         if nav_result.status == GoalStatus.STATUS_SUCCEEDED:
-            return True, 'succeeded'
-        return False, f'Nav2 failed with status {nav_result.status}'
+            return True, 'succeeded', state['refined']
+        return (False, f'Nav2 failed with status {nav_result.status}',
+                state['refined'])
+
+    def _facing_object(self, ox, oy):
+        """True when the robot's heading is within refine_trigger_yaw of the
+        bearing to the object — i.e. the camera is actually looking at the
+        table, so the local costmap marks there can be trusted for the PCA."""
+        robot = self._costmap_reader.get_robot_pose_full(self._global_frame)
+        if robot is None:
+            return False
+        bearing = math.atan2(oy - robot[1], ox - robot[0])
+        err = math.atan2(math.sin(bearing - robot[2]),
+                         math.cos(bearing - robot[2]))
+        return abs(err) <= self._refine_trigger_yaw
 
     def _refinement_worthwhile(self, pose):
-        """Skip the phase-2 move when the refined pose is where the robot
-        already stands (within tolerance)."""
-        robot = self._costmap_reader.get_robot_pose(self._global_frame)
+        """Skip the phase-2 move only when the robot already stands at the
+        refined pose — position AND heading. Phase 1 may have been canceled
+        mid-drive, leaving the robot near the spot but pointing wherever it
+        was driving; the aligned heading is the whole point of phase 2."""
+        robot = self._costmap_reader.get_robot_pose_full(self._global_frame)
         if robot is None:
             return True
         dist = math.hypot(pose.pose.position.x - robot[0],
                           pose.pose.position.y - robot[1])
-        return (dist > self._refine_pos_tol)
+        target_yaw = _yaw_from_quaternion(pose.pose.orientation)
+        dyaw = math.atan2(math.sin(target_yaw - robot[2]),
+                          math.cos(target_yaw - robot[2]))
+        return dist > self._refine_pos_tol or abs(dyaw) > self._refine_yaw_tol
 
     async def _execute_cb(self, goal_handle):
         goal = goal_handle.request
@@ -248,12 +354,20 @@ class NavCommander(Node):
             f'Goal: object=({goal.obj_x:.3f}, {goal.obj_y:.3f}), '
             f'method={method}')
 
-        # Edge already visible (object close, camera on it)? Go straight in.
+        # Edge already visible? Go straight in — but only when the robot is
+        # actually FACING the object (same gate as the mid-approach trigger):
+        # the local costmap can hold stale marks the camera never confirmed,
+        # and a PCA on those must not skip the approach phase.
         if method == 'nearest_edge':
-            pose = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
+            pose = None
+            if self._facing_object(goal.obj_x, goal.obj_y):
+                pose = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
+            else:
+                self.get_logger().info(
+                    'Not facing the object, skipping direct edge check')
             if pose is not None:
                 self.get_logger().info('Edge visible, single-phase approach')
-                ok, msg = await self._navigate(goal_handle, pose)
+                ok, msg, _ = await self._navigate(goal_handle, pose)
                 if ok:
                     goal_handle.succeed()
                 else:
@@ -267,20 +381,49 @@ class NavCommander(Node):
                     'Edge not visible and two_phase disabled, '
                     'falling back to face_target only')
 
-        # Phase 1: walk up facing the object so the camera marks the table
+        # Phase 1: walk up to a standoff point near the object, facing it.
+        # The pose is grounded by the planner (path end + heading to object),
+        # and the refine check below switches to the PCA pose as soon as the
+        # robot is close and facing the object — usually before phase 1 even
+        # finishes.
         pose1 = self._face_target_pose(goal.obj_x, goal.obj_y, standoff)
+        if pose1 is not None:
+            pose1 = await self._ground_phase1_pose(
+                pose1, goal.obj_x, goal.obj_y)
         if pose1 is None:
             self.get_logger().error('Approach pose computation failed')
             goal_handle.abort()
             result.success = False
             result.message = 'Failed to compute approach pose'
             return result
-        self.get_logger().info('Phase 1: face_target toward object')
-        ok, msg = await self._navigate(goal_handle, pose1)
-        if not ok:
+
+        refine_check = None
+        if method == 'nearest_edge' and self._two_phase:
+            def refine_check(fb):
+                # Trigger only near the goal and roughly facing the object,
+                # i.e. when the camera can actually see the table edge.
+                if not (1e-3 < fb.distance_remaining
+                        <= self._refine_trigger_dist):
+                    return None
+                cur = fb.current_pose.pose
+                yaw = _yaw_from_quaternion(cur.orientation)
+                bearing = math.atan2(goal.obj_y - cur.position.y,
+                                     goal.obj_x - cur.position.x)
+                err = math.atan2(math.sin(bearing - yaw),
+                                 math.cos(bearing - yaw))
+                if abs(err) > self._refine_trigger_yaw:
+                    return None
+                return self._try_nearest_edge(
+                    goal.obj_x, goal.obj_y, standoff)
+
+        self.get_logger().info('Phase 1: approaching object')
+        ok, msg, refined = await self._navigate(
+            goal_handle, pose1, refine_check=refine_check)
+
+        if refined is None and not ok:
             goal_handle.abort()
             result.success = False
-            result.message = f'Phase 1 (face_target) failed: {msg}'
+            result.message = f'Phase 1 (approach) failed: {msg}'
             return result
 
         if method != 'nearest_edge' or not self._two_phase:
@@ -289,8 +432,11 @@ class NavCommander(Node):
             result.message = 'Reached approach pose (method: face_target)'
             return result
 
-        # Phase 2: camera now sees the table edge -> PCA refinement
-        pose2 = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
+        # Phase 2: edge-aligned pose, either found mid-approach (phase 1 was
+        # canceled for it) or computed now that the robot has arrived.
+        pose2 = refined
+        if pose2 is None:
+            pose2 = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
         if pose2 is None:
             self.get_logger().warn(
                 'Phase 2: edge still not detected, staying at face_target pose')
@@ -306,8 +452,8 @@ class NavCommander(Node):
             result.message = 'Reached edge-aligned approach pose'
             return result
 
-        self.get_logger().info('Phase 2: refining with nearest_edge')
-        ok, msg = await self._navigate(goal_handle, pose2)
+        self.get_logger().info('Phase 2: navigating to edge-aligned pose')
+        ok, msg, _ = await self._navigate(goal_handle, pose2)
         if ok:
             goal_handle.succeed()
         else:
@@ -395,6 +541,15 @@ class NavCommander(Node):
             ]
             arr.markers.append(m)
 
+        # Raycast seed: first occupied cell on the robot->object ray (white)
+        if 'ray_seed' in dbg:
+            s = dbg['ray_seed']
+            m = self._make_marker(10, Marker.SPHERE, frame_id)
+            m.pose.position = self._pt(s[0], s[1], 0.06)
+            m.scale.x = m.scale.y = m.scale.z = 0.08
+            m.color = self._color(1.0, 1.0, 1.0)
+            arr.markers.append(m)
+
         # Object (magenta sphere) and its projection on the edge (blue sphere)
         ox, oy = dbg['object']
         m = self._make_marker(5, Marker.SPHERE, frame_id)
@@ -425,6 +580,8 @@ class NavCommander(Node):
 
         # Text panel with the numbers, floating above the object
         lines = [f"method: {dbg.get('method', 'none')}"]
+        if 'anchor' in dbg:
+            lines.append(f"anchor: {dbg['anchor']}")
         if occ is not None:
             n_front = 0 if front is None else len(front)
             lines.append(f'cells: {len(occ)} occ / {n_front} front')

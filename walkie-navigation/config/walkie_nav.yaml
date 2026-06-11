@@ -1,10 +1,14 @@
 nav_commander:
   ros__parameters:
-    standoff: 0.65
+    standoff: 0.1
     inflation_radius: 0.30
     search_radius: 1.20
     min_occupied_cells: 5
-    front_edge_tolerance: 0.25
+    # Rim line fit: boundary cells within edge_fit_radius of the raycast
+    # anchor seed the fit; cells within edge_inlier_dist perpendicular of
+    # the fitted line count as edge inliers
+    edge_fit_radius: 0.4
+    edge_inlier_dist: 0.10
     default_method: "nearest_edge"
     fallback_method: "face_target"
     # The ZED head camera only marks the table into the LOCAL costmap, and
@@ -13,8 +17,16 @@ nav_commander:
     two_phase: true
     # Skip the phase-2 move when the refined pose is within this distance of
     # where the robot already stands
-    refine_position_tolerance: 0.08
-    refine_yaw_tolerance_deg: 8.0
+    refine_position_tolerance: 0.3
+    refine_yaw_tolerance_deg: 15.0
+    # Mid-approach refinement trigger: within this distance of the phase-1
+    # goal AND facing the object within this angle, run the PCA and switch
+    # to the edge-aligned pose without finishing phase 1
+    refine_trigger_distance: 1.5
+    refine_trigger_yaw_deg: 30.0
+    # Phase-1 pose grounding: plan to the geometric standoff point with this
+    # planner, take the path's last pose and face the object from there
+    planner_id: "GridBased"
     costmap_topic: "/local_costmap/costmap"
     robot_pose_topic: "/amcl_pose"
     # RViz "Publish Point" tool: click places the object and starts the

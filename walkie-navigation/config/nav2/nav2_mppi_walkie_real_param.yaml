@@ -152,14 +152,14 @@ controller_server:
 
       vx_std: 0.2
       vy_std: 0.1
-      wz_std: 0.4
+      wz_std: 0.6                     # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.3
       vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.0
-      wz_min: -1.0
+      wz_max: 1.5                     # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
+      wz_min: -1.5
 
       ax_max: 2.5
       ax_min: -2.5
@@ -211,20 +211,20 @@ controller_server:
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 3.0              # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
         threshold_to_consider: 0.5
       GoalAngleCritic:
         enabled: true
-        cost_weight: 5.0
+        cost_weight: 12.0             # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
         cost_power: 1
-        threshold_to_consider: 0.5
+        threshold_to_consider: 0.75   # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
         symmetric_yaw_tolerance: false
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 8.0
+        cost_weight: 14.0             # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
         max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 4
+        trajectory_point_step: 3      # was 4 — denser alignment sampling, tighter tracking on curves
         threshold_to_consider: 0.5
         offset_from_furthest: 20
         use_path_orientations: false  # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
@@ -258,7 +258,9 @@ controller_server:
         # turns by STRAFING instead of turning to face (sideways into doorways).
         # Low value: still curbs pointless pirouettes but lets it rotate to face
         # its travel direction. Strafing stays available (Omni model + vy kept).
-        twirling_cost_weight: 2.0
+        # 2.0 -> 1.0: every rad/s of wz was still being taxed, slowing rotate-to-
+        # path and rotate-to-goal; halved so the angle critics win sooner.
+        twirling_cost_weight: 1.0
 
 docking_server:
   ros__parameters:
@@ -481,7 +483,6 @@ planner_server:
       tolerance: 0.5
       use_astar: false
       allow_unknown: true
-      # use_final_approach_orientation: true
 
 smoother_server:
   ros__parameters:

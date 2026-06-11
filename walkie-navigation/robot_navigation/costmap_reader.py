@@ -9,6 +9,8 @@ points/poses between map and the costmap frame. /amcl_pose is kept as the
 fast path for the map-frame robot pose when AMCL is running.
 """
 
+import math
+
 import rclpy
 import tf2_ros
 from geometry_msgs.msg import PointStamped, PoseWithCovarianceStamped
@@ -32,6 +34,7 @@ class CostmapReader:
         self.latest_costmap = None
         self.robot_x = 0.0
         self.robot_y = 0.0
+        self.robot_yaw = 0.0
         self._have_amcl_pose = False
         self.global_frame = global_frame
         self.robot_base_frame = robot_base_frame
@@ -51,6 +54,9 @@ class CostmapReader:
     def _pose_cb(self, msg):
         self.robot_x = msg.pose.pose.position.x
         self.robot_y = msg.pose.pose.position.y
+        q = msg.pose.pose.orientation
+        self.robot_yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                                    1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self._have_amcl_pose = True
 
     def costmap_frame(self):
@@ -74,6 +80,27 @@ class CostmapReader:
                 f'CostmapReader: robot pose in {frame} unavailable: {e}')
             if frame == self.global_frame:
                 return self.robot_x, self.robot_y
+            return None
+
+    def get_robot_pose_full(self, frame=None) -> tuple[float, float, float] | None:
+        """Robot (x, y, yaw) in the given frame (default: global_frame).
+        TF first — /amcl_pose only updates every update_min_d of travel, so
+        it can be ~0.25 m / stale-heading behind while driving; checks that
+        compare against the live robot pose need TF. Falls back to the last
+        AMCL pose for the global frame."""
+        frame = frame or self.global_frame
+        try:
+            t = self._tf_buffer.lookup_transform(
+                frame, self.robot_base_frame, rclpy.time.Time())
+            q = t.transform.rotation
+            yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                             1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+            return (t.transform.translation.x, t.transform.translation.y, yaw)
+        except _TF_ERRORS as e:
+            if frame == self.global_frame and self._have_amcl_pose:
+                return self.robot_x, self.robot_y, self.robot_yaw
+            self.node.get_logger().warn(
+                f'CostmapReader: full robot pose in {frame} unavailable: {e}')
             return None
 
     def transform_point(self, x, y, from_frame, to_frame):
