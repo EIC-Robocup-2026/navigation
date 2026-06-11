@@ -19,11 +19,16 @@ nav_commander:
     # where the robot already stands
     refine_position_tolerance: 0.3
     refine_yaw_tolerance_deg: 15.0
-    # Mid-approach refinement trigger: within this distance of the phase-1
-    # goal AND facing the object within this angle, run the PCA and switch
-    # to the edge-aligned pose without finishing phase 1
+    # Mid-approach refinement trigger: object within this straight-line
+    # distance of the robot AND robot facing it within this angle, run the
+    # PCA and switch to the edge-aligned pose without finishing phase 1
     refine_trigger_distance: 1.5
-    refine_trigger_yaw_deg: 30.0
+    refine_trigger_yaw_deg: 60.0
+    # Each edge-pose estimate aggregates this many fits (one per costmap
+    # update, or per sample interval as fallback); outliers vs the median
+    # are dropped and the rest averaged. Per-sample log when debug: true
+    refine_samples: 10
+    refine_sample_interval: 0.1
     # Phase-1 pose grounding: plan to the geometric standoff point with this
     # planner, take the path's last pose and face the object from there
     planner_id: "GridBased"

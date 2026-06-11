@@ -29,6 +29,7 @@ and can be toggled at runtime with `ros2 param set /nav_commander debug true`.
 import math
 import time
 
+import numpy as np
 import rclpy
 from action_msgs.msg import GoalStatus
 from rcl_interfaces.msg import SetParametersResult
@@ -53,6 +54,13 @@ def _yaw_from_quaternion(q):
                       1.0 - 2.0 * (q.y * q.y + q.z * q.z))
 
 
+# Outlier gates for the multi-sample edge aggregation: samples deviating more
+# than this from the median position / mean heading are dropped before
+# averaging.
+AGG_POS_OUTLIER_M = 0.10
+AGG_YAW_OUTLIER_DEG = 10.0
+
+
 class NavCommander(Node):
     def __init__(self):
         super().__init__('nav_commander')
@@ -68,13 +76,19 @@ class NavCommander(Node):
         self.declare_parameter('two_phase', True)
         self.declare_parameter('refine_position_tolerance', 0.08)
         self.declare_parameter('refine_yaw_tolerance_deg', 8.0)
-        # Mid-approach refinement: once within this distance of the phase-1
-        # goal AND roughly facing the object, run the PCA and switch to the
-        # edge-aligned pose without waiting for phase 1 to finish.
-        self.declare_parameter('refine_trigger_distance', 0.4)
+        # Mid-approach refinement: once the OBJECT is within this straight-
+        # line distance of the robot AND the robot roughly faces it, run the
+        # PCA and switch to the edge-aligned pose without waiting for phase 1
+        # to finish.
+        self.declare_parameter('refine_trigger_distance', 1.5)
         self.declare_parameter('refine_trigger_yaw_deg', 30.0)
         self.declare_parameter('planner_id', 'GridBased')
         self.declare_parameter('compute_path_action', 'compute_path_to_pose')
+        # Each edge-pose estimate aggregates this many fits, one per costmap
+        # update (or per sample interval as fallback); outliers are rejected
+        # and the rest averaged so one noisy STVL update can't steer the pose.
+        self.declare_parameter('refine_samples', 10)
+        self.declare_parameter('refine_sample_interval', 0.1)
         self.declare_parameter('costmap_topic', '/local_costmap/costmap')
         self.declare_parameter('robot_pose_topic', '/amcl_pose')
         self.declare_parameter('clicked_point_topic', '/clicked_point')
@@ -104,6 +118,9 @@ class NavCommander(Node):
             self.get_parameter('refine_trigger_yaw_deg').value)
         self._global_frame = self.get_parameter('global_frame').value
         self._planner_id = self.get_parameter('planner_id').value
+        self._refine_samples = self.get_parameter('refine_samples').value
+        self._refine_sample_interval = self.get_parameter(
+            'refine_sample_interval').value
 
         self._costmap_reader = CostmapReader(
             self,
@@ -214,6 +231,74 @@ class NavCommander(Node):
             return None
         pose.header.frame_id = frame
         return self._costmap_reader.transform_pose(pose, self._global_frame)
+
+    def _try_nearest_edge_multi(self, obj_x, obj_y, standoff):
+        """Aggregate several edge fits into one pose. Each sample waits for a
+        fresh costmap update (or refine_sample_interval as fallback) before
+        fitting, so one partial STVL mark can't steer the approach alone.
+        Outliers vs the median position / mean heading are dropped, the rest
+        averaged (circular mean for yaw). Returns None when no sample fits."""
+        n = max(1, int(self._refine_samples))
+        samples = []
+        for i in range(n):
+            prev = self._costmap_reader.latest_costmap
+            deadline = time.monotonic() + self._refine_sample_interval
+            while (time.monotonic() < deadline
+                   and self._costmap_reader.latest_costmap is prev):
+                time.sleep(0.01)
+            pose = self._try_nearest_edge(obj_x, obj_y, standoff)
+            dbg = self._computer.last_debug or {}
+            if pose is None:
+                if self._debug:
+                    reason = dbg.get('fail_reason', 'no costmap/transform')
+                    self.get_logger().info(
+                        f'edge sample {i + 1}/{n}: failed ({reason})')
+                continue
+            x = pose.pose.position.x
+            y = pose.pose.position.y
+            yaw = _yaw_from_quaternion(pose.pose.orientation)
+            samples.append((x, y, yaw))
+            if self._debug:
+                self.get_logger().info(
+                    f'edge sample {i + 1}/{n}: x={x:.3f} y={y:.3f} '
+                    f'yaw={math.degrees(yaw):.1f} deg '
+                    f'(eig {dbg.get("eig_ratio", float("nan")):.0f})')
+        if not samples:
+            return None
+
+        xs = np.array([s[0] for s in samples])
+        ys = np.array([s[1] for s in samples])
+        yaws = np.array([s[2] for s in samples])
+        # Stage 1: position consensus around the median (robust — a circular
+        # MEAN of yaws is dragged by outliers and must not be the reference).
+        pos_dev = np.hypot(xs - float(np.median(xs)), ys - float(np.median(ys)))
+        pos_inlier = pos_dev <= AGG_POS_OUTLIER_M
+        if not pos_inlier.any():
+            self.get_logger().warn(
+                'edge aggregate: no position consensus among samples, '
+                'rejecting batch')
+            return None
+        # Stage 2: heading consensus, referenced only on position inliers.
+        ref_yaw = math.atan2(float(np.mean(np.sin(yaws[pos_inlier]))),
+                             float(np.mean(np.cos(yaws[pos_inlier]))))
+        yaw_dev = np.abs(np.arctan2(np.sin(yaws - ref_yaw),
+                                    np.cos(yaws - ref_yaw)))
+        inlier = pos_inlier & (yaw_dev <= math.radians(AGG_YAW_OUTLIER_DEG))
+        if not inlier.any():
+            self.get_logger().warn(
+                'edge aggregate: no heading consensus among samples, '
+                'rejecting batch')
+            return None
+
+        avg_x = float(xs[inlier].mean())
+        avg_y = float(ys[inlier].mean())
+        avg_yaw = math.atan2(float(np.sin(yaws[inlier]).mean()),
+                             float(np.cos(yaws[inlier]).mean()))
+        self.get_logger().info(
+            f'edge aggregate: {len(samples)}/{n} fits, '
+            f'{int(inlier.sum())} inliers -> x={avg_x:.3f} y={avg_y:.3f} '
+            f'yaw={math.degrees(avg_yaw):.1f} deg')
+        return ApproachPoseComputer._build_pose_stamped(avg_x, avg_y, avg_yaw)
 
     def _face_target_pose(self, obj_x, obj_y, standoff):
         robot = self._costmap_reader.get_robot_pose(self._global_frame)
@@ -361,7 +446,8 @@ class NavCommander(Node):
         if method == 'nearest_edge':
             pose = None
             if self._facing_object(goal.obj_x, goal.obj_y):
-                pose = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
+                pose = self._try_nearest_edge_multi(
+                    goal.obj_x, goal.obj_y, standoff)
             else:
                 self.get_logger().info(
                     'Not facing the object, skipping direct edge check')
@@ -399,13 +485,20 @@ class NavCommander(Node):
 
         refine_check = None
         if method == 'nearest_edge' and self._two_phase:
+            # Multi-sample runs take ~refine_samples * interval; feedback
+            # keeps arriving meanwhile (reentrant group), so serialize.
+            sampling = {'busy': False}
+
             def refine_check(fb):
-                # Trigger only near the goal and roughly facing the object,
-                # i.e. when the camera can actually see the table edge.
-                if not (1e-3 < fb.distance_remaining
-                        <= self._refine_trigger_dist):
-                    return None
+                # Trigger only when the OBJECT is close (straight-line robot
+                # to object, independent of path shape and standoff) and the
+                # robot roughly faces it, i.e. when the camera can actually
+                # see the table edge at marking range.
                 cur = fb.current_pose.pose
+                dist_to_object = math.hypot(goal.obj_x - cur.position.x,
+                                            goal.obj_y - cur.position.y)
+                if dist_to_object > self._refine_trigger_dist:
+                    return None
                 yaw = _yaw_from_quaternion(cur.orientation)
                 bearing = math.atan2(goal.obj_y - cur.position.y,
                                      goal.obj_x - cur.position.x)
@@ -413,8 +506,14 @@ class NavCommander(Node):
                                  math.cos(bearing - yaw))
                 if abs(err) > self._refine_trigger_yaw:
                     return None
-                return self._try_nearest_edge(
-                    goal.obj_x, goal.obj_y, standoff)
+                if sampling['busy']:
+                    return None
+                sampling['busy'] = True
+                try:
+                    return self._try_nearest_edge_multi(
+                        goal.obj_x, goal.obj_y, standoff)
+                finally:
+                    sampling['busy'] = False
 
         self.get_logger().info('Phase 1: approaching object')
         ok, msg, refined = await self._navigate(
@@ -436,7 +535,8 @@ class NavCommander(Node):
         # canceled for it) or computed now that the robot has arrived.
         pose2 = refined
         if pose2 is None:
-            pose2 = self._try_nearest_edge(goal.obj_x, goal.obj_y, standoff)
+            pose2 = self._try_nearest_edge_multi(
+                goal.obj_x, goal.obj_y, standoff)
         if pose2 is None:
             self.get_logger().warn(
                 'Phase 2: edge still not detected, staying at face_target pose')
