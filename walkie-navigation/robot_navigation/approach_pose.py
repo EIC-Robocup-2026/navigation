@@ -295,15 +295,14 @@ class ApproachPoseComputer:
     @staticmethod
     def _build_pose_stamped(x, y, yaw):
         from geometry_msgs.msg import PoseStamped
-        from tf_transformations import quaternion_from_euler
 
         pose = PoseStamped()
         pose.header.frame_id = 'map'
         pose.pose.position.x = float(x)
         pose.pose.position.y = float(y)
-        q = quaternion_from_euler(0, 0, yaw)
-        pose.pose.orientation.x = q[0]
-        pose.pose.orientation.y = q[1]
-        pose.pose.orientation.z = q[2]
-        pose.pose.orientation.w = q[3]
+        # Planar yaw-only quaternion, inline on purpose: tf_transformations
+        # pulls in transforms3d, whose apt version calls np.maximum_sctype
+        # and crashes under NumPy 2 (as found on the robot's Jetson).
+        pose.pose.orientation.z = math.sin(yaw / 2.0)
+        pose.pose.orientation.w = math.cos(yaw / 2.0)
         return pose
