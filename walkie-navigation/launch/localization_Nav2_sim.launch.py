@@ -5,6 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -48,6 +49,12 @@ def generate_launch_description():
         description="Full path to the nav2 config YAML file",
     )
 
+    declare_nav_debug_cmd = DeclareLaunchArgument(
+        "nav_debug",
+        default_value="false",
+        description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
+    )
+
     # Include navigation launch file
     nav2_bringup_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -60,6 +67,24 @@ def generate_launch_description():
             "default_nav_to_pose_bt_xml": bt_xml_path,
         }.items(),
     )
+    # Object approach-pose action server (/navigate_to_object -> Nav2)
+    walkie_nav_config = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "config",
+        "walkie_nav.yaml",
+    )
+    nav_commander = Node(
+        package="robot_navigation",
+        executable="nav_commander.py",
+        name="nav_commander",
+        output="screen",
+        parameters=[
+            walkie_nav_config,
+            {"use_sim_time": use_sim_time,
+             "debug": LaunchConfiguration("nav_debug")},
+        ],
+    )
+
     # Create launch description
     ld = LaunchDescription()
 
@@ -67,6 +92,8 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
+    ld.add_action(declare_nav_debug_cmd)
     ld.add_action(nav2_bringup_launch)
+    ld.add_action(nav_commander)
 
     return ld

@@ -1,0 +1,12 @@
+# Goal
+float64 obj_x
+float64 obj_y
+string  align_method
+float64 standoff
+---
+# Result
+bool   success
+string message
+---
+# Feedback
+float32 distance_remaining
