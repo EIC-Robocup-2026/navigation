@@ -63,7 +63,7 @@
               -->
               <Sequence>
                 <Inverter>
-                  <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
                 <Wait wait_duration="6.0"/>
@@ -87,7 +87,7 @@
               -->
               <Sequence>
                 <Inverter>
-                  <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
                 <Wait wait_duration="2.0"/>
@@ -117,7 +117,7 @@
         <GoalUpdated/>
         <Sequence name="RetryOnlyIfFarFromGoal">
           <Inverter>
-            <IsGoalNearby path="{path}" proximity_threshold="0.8" max_robot_pose_search_dist="1.5"/>
+            <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
           </Inverter>
           <Wait wait_duration="5.0"/>
         </Sequence>
