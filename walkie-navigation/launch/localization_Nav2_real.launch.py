@@ -114,7 +114,8 @@ def generate_launch_description():
         name="nav_commander",
         output="screen",
         parameters=[
-            walkie_nav_config,
+            os.path.join(get_package_share_directory("robot_navigation")
+                         , "config", "walkie_nav.yaml"),
             {"use_sim_time": use_sim_time,
              "debug": LaunchConfiguration("nav_debug")},
         ],
