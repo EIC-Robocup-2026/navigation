@@ -29,26 +29,23 @@ def generate_launch_description():
         "config",
         "walkie_nav.yaml",
     )
+    # SLAM Toolbox parameters (online sync mapping mode)
+    slam_params_file = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "config",
+        "slam",
+        "slam_toolbox_params.yaml",
+    )
 
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
-    map_yaml_file = LaunchConfiguration("map")
     nav2_config = LaunchConfiguration("nav2_config")
-
-    default_map = (
-        get_package_share_directory("robot_navigation")
-        + "/map/18_17062026_ChulaPat14_5/map.yaml"
-    )
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         "use_sim_time",
         default_value="false",
         description="Use simulation clock if true",
-    )
-
-    declare_map_yaml_cmd = DeclareLaunchArgument(
-        "map", default_value=default_map, description="Full path to the map YAML file"
     )
 
     declare_nav2_config_cmd = DeclareLaunchArgument(
@@ -63,15 +60,20 @@ def generate_launch_description():
         description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
     )
 
-    # Include localization launch file (handles AMCL and Map Server)
-    localization_launch = IncludeLaunchDescription(
+    # Include SLAM Toolbox (online sync) instead of localization. SLAM provides the
+    # map->odom transform and builds/publishes the map live, so no AMCL or Map Server
+    # (and no pre-saved map) is needed in this mode.
+    slam_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "localization_launch.py")
+            os.path.join(
+                get_package_share_directory("slam_toolbox"),
+                "launch",
+                "online_sync_launch.py",
+            )
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
-            "map": map_yaml_file,
-            "params_file": nav2_config,
+            "slam_params_file": slam_params_file,
         }.items(),
     )
 
@@ -130,12 +132,11 @@ def generate_launch_description():
 
     # Add declared launch arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_nav_debug_cmd)
 
     # Add the separated launch files
-    ld.add_action(localization_launch)
+    ld.add_action(slam_launch)
     ld.add_action(navigation_launch)
     ld.add_action(head_tilt_near_goal)
     ld.add_action(nav_commander)

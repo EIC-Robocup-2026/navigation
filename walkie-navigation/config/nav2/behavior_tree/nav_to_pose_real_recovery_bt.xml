@@ -37,6 +37,53 @@
     -->
     <Fallback name="NavigateOrFaceGoalHeading">
 
+    <Sequence name="PreRotateThenNavigate">
+
+      <!--
+        Pre-rotation (runs ONCE per fresh goal, before MPPI):
+
+        Walkie is an omnibot, so MPPI has no kinematic cost to reverse; over its
+        ~2.8 s horizon it crabs backward to far goals rather than paying the
+        upfront cost of yawing to face forward. This step plans a path, then
+        rotates in place to face the path heading ~1.2 m ahead, so MPPI starts
+        already pointed forward and just drives.
+
+        Placement & wrapping (both deliberate):
+          • OUTSIDE NavigateRecovery — so the 5 s / 2 s dynamic-obstacle retries
+            below do NOT re-trigger a spin every recovery cycle.
+          • ForceSuccess — a missing path, an unreachable goal, or an aborted
+            Spin must never block navigation; we always fall through to it.
+
+        Gating lives in ComputePathHeadingSpin: only spins when the remaining
+        path is >= min_path_length (3 m). Shorter moves get spin_dist = 0, so
+        the Spin no-ops and MPPI keeps its freedom to reverse at close range.
+
+        Boxed-in start guard: if the robot starts in a tight space (doorway,
+        between tables) with no room to rotate in place, ComputePathHeadingSpin
+        checks the local costmap (rotation_clearance_radius) and skips the spin
+        (spin_dist = 0) so MPPI drives forward out of the gap instead of the
+        Spin colliding, aborting, and dropping into recovery.
+
+        NOTE: re-arms on a FRESH goal (idle robot -> tree resets). A goal sent
+        as a PREEMPT mid-drive does NOT reset the tree, so it won't re-spin
+        (acceptable — the robot is already moving).
+      -->
+      <ForceSuccess>
+        <Sequence name="PreRotateToPath">
+          <!--
+            Best-effort plan: a transient planner/costmap/TF failure right at goal
+            acceptance must NOT skip the spin. ForceSuccess lets the sequence fall
+            through to ComputePathHeadingSpin, which then faces the goal bearing
+            (its built-in fallback) when {prerotate_path} came back empty.
+          -->
+          <ForceSuccess>
+            <ComputePathToPose goal="{goal}" path="{prerotate_path}" planner_id="GridBased" error_code_id="{prerotate_plan_error}"/>
+          </ForceSuccess>
+          <ComputePathHeadingSpin path="{prerotate_path}" goal="{goal}" min_path_length="3.0" forward_sampling_distance="1.2" min_spin="0.25" max_spin="3.2" check_rotation_clearance="true" rotation_clearance_radius="0.40" lethal_cost_threshold="254" spin_dist="{prerotate_spin_dist}" do_spin="{prerotate_do_spin}"/>
+          <Spin spin_dist="{prerotate_spin_dist}" time_allowance="15.0" is_recovery="false"/>
+        </Sequence>
+      </ForceSuccess>
+
     <RecoveryNode number_of_retries="5" name="NavigateRecovery">
 
         <PipelineSequence name="NavigateWithReplanning">
@@ -58,15 +105,25 @@
                 <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
               </Fallback>
               <!--
-                Near goal: fail immediately — no 6 s wait, no costmap changes.
-                Far from goal: wait 6 s (> voxel_decay 5 s) so dynamic objects passively decay.
+                Planner failed.
+                  Near goal: fail immediately — no clear, no wait, no costmap changes.
+                  Far from goal AND a planner recovery would help:
+                    1. Clear ONLY the global costmap — the map the planner plans on.
+                       Its STVL layer decays over 15 s (longer than any wait), so a
+                       stale/phantom voxel can block every route until actively dropped.
+                       The LOCAL costmap (MPPI's collision source) is left untouched.
+                    2. Then wait 6 s. Clearing BEFORE the wait lets genuinely-present
+                       obstacles re-mark during those 6 s, so the planner retry won't
+                       route through something that was only momentarily cleared, while
+                       dynamic objects get time to move on.
               -->
               <Sequence>
                 <Inverter>
                   <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
-                <Wait wait_duration="6.0"/>
+                <ClearEntireCostmap name="ClearGlobalCostmap-PlannerRecovery" service_name="global_costmap/clear_entirely_global_costmap"/>
+                <Wait wait_duration="2.0"/>
               </Sequence>
             </RecoveryNode>
           </RateController>
@@ -125,7 +182,9 @@
 
     </RecoveryNode>
 
-      <!-- Runs only if NavigateRecovery failed (goal aborted). -->
+    </Sequence>
+
+      <!-- Runs only if PreRotateThenNavigate failed (goal aborted). -->
       <Sequence name="FaceGoalHeadingThenAbort">
         <ComputeGoalHeadingSpin goal="{goal}" spin_dist="{spin_dist}"/>
         <Spin spin_dist="{spin_dist}"/>

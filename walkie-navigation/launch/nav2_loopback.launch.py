@@ -162,7 +162,7 @@ def generate_launch_description():
     ld.add_action(map_server)
     ld.add_action(map_lifecycle_manager)
     ld.add_action(nav2_navigation)
-    ld.add_action(nav_commander)
+    # ld.add_action(nav_commander)
     ld.add_action(rviz)
 
     return ld

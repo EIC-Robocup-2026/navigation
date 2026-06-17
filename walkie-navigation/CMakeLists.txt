@@ -24,6 +24,7 @@ find_package(behaviortree_cpp REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(nav2_util REQUIRED)
 find_package(nav2_ros_common REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
 
 
 # Generate the Services and Actions
@@ -88,6 +89,28 @@ ament_target_dependencies(compute_goal_bearing_spin_bt_node
   tf2_ros
 )
 install(TARGETS compute_goal_bearing_spin_bt_node
+  LIBRARY DESTINATION lib
+  ARCHIVE DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+# ComputePathHeadingSpin BT plugin — spins the base to face the planned PATH
+# heading (a point ~forward_sampling_distance ahead) before FollowPath, so the
+# omnibot drives forward to far goals instead of reversing the whole way.
+add_library(compute_path_heading_spin_bt_node SHARED
+  robot_navigation/compute_path_heading_spin.cpp)
+target_compile_definitions(compute_path_heading_spin_bt_node PRIVATE BT_PLUGIN_EXPORT)
+ament_target_dependencies(compute_path_heading_spin_bt_node
+  behaviortree_cpp
+  geometry_msgs
+  nav_msgs
+  nav2_util
+  nav2_ros_common
+  nav2_costmap_2d
+  rclcpp
+  tf2_ros
+)
+install(TARGETS compute_path_heading_spin_bt_node
   LIBRARY DESTINATION lib
   ARCHIVE DESTINATION lib
   RUNTIME DESTINATION bin

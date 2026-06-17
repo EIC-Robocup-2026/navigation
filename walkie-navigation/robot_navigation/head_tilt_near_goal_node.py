@@ -29,6 +29,20 @@ relies on a remembered "current pose", which would silently desync if anything
 else moved the head). A plain volatile publisher is used so we never hold/latch
 the topic.
 
+A down-tilt only fires once the robot has genuinely been OUTSIDE the near zone
+for the current goal (an "approach armed" flag). This means a goal that only
+changes heading -- robot already at the goal position, distance_remaining never
+exceeds `near_distance` -- never tilts, since there was no real approach.
+
+Yielding the camera
+-------------------
+An external (non-ROS) agent sometimes aims the camera too. A `SetBool` service
+(`~/enable`, i.e. `/head_tilt_near_goal/enable`) gates this node: call it with
+`data: false` and the node goes fully silent -- it issues no head commands and
+drops any in-flight motion, leaving the head wherever it is for the other
+controller. `data: true` hands control back; the next approach re-evaluates from
+a clean slate.
+
 Motion profile
 --------------
 The position controller jumps to whatever setpoint it last received, so a single
@@ -49,6 +63,7 @@ from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
 
 from std_msgs.msg import Float64MultiArray
+from std_srvs.srv import SetBool
 from nav2_msgs.action import NavigateToPose
 
 # The wrapper message published on the hidden action feedback topic. It carries
@@ -68,6 +83,10 @@ class HeadTiltNearGoal(Node):
         # crossing back past far_distance (far > near gives hysteresis).
         self.declare_parameter("near_distance", 1.5)
         self.declare_parameter("far_distance", 1.7)
+        # Distances at or below this are ignored as "not a real approach": a
+        # heading-only / in-place-rotation goal sits at a tiny distance_remaining
+        # the whole time, so treating it as noise keeps the head from tilting.
+        self.declare_parameter("near_ignore_distance", 0.3)
         # Head angles (rad). default = forward-ish nav pose, down = look at table.
         self.declare_parameter("default_angle", 0.25)
         self.declare_parameter("down_angle", 0.785)
@@ -81,22 +100,33 @@ class HeadTiltNearGoal(Node):
         # takes about |delta| / tilt_speed seconds, eased in and out.
         self.declare_parameter("tilt_speed", 0.6)
         self.declare_parameter("profile_rate", 30.0)
+        # Runtime gate. While disabled this node issues no head commands at all,
+        # so an external camera controller can own the head. start_enabled sets
+        # the boot state; enable_service is the SetBool service name.
+        self.declare_parameter("enable_service", "~/enable")
+        self.declare_parameter("start_enabled", True)
 
         self._cmd_topic = self.get_parameter("head_command_topic").value
         self._near = self.get_parameter("near_distance").value
         self._far = self.get_parameter("far_distance").value
+        self._near_ignore = self.get_parameter("near_ignore_distance").value
         self._default_angle = self._clamp(self.get_parameter("default_angle").value)
         self._down_angle = self._clamp(self.get_parameter("down_angle").value)
         self._idle_timeout = self.get_parameter("idle_return_timeout").value
         feedback_topic = self.get_parameter("feedback_topic").value
         self._tilt_speed = max(1e-3, float(self.get_parameter("tilt_speed").value))
         self._profile_rate = max(1.0, float(self.get_parameter("profile_rate").value))
+        self._enabled = bool(self.get_parameter("start_enabled").value)
 
         # True once we have issued the down command for the current approach. Reset
         # to False on a new goal and after we return to default. This is a one-shot
         # latch for OUR command edges only -- it is NOT a belief about where the
         # head physically is, so other systems moving the head can't desync us.
         self._down_sent = False
+        # Armed once we've seen the robot genuinely OUTSIDE the near zone for the
+        # current goal. Required before any down-tilt, so a goal that is already
+        # near at acceptance (heading-only / in-place rotation) never tilts.
+        self._approach_armed = False
         # goal_id of the goal we are currently tracking.
         self._last_goal_id = None
         # clock time of the most recent feedback (None = none yet).
@@ -127,15 +157,34 @@ class HeadTiltNearGoal(Node):
         # returns immediately (silent) when no move is active.
         self._profile_timer = self.create_timer(1.0 / self._profile_rate, self._profile_tick)
 
+        # Runtime enable/disable gate so an external controller can own the head.
+        enable_service_name = self.get_parameter("enable_service").value
+        self._enable_srv = self.create_service(SetBool, enable_service_name, self._set_enabled_cb)
+
         self.get_logger().info(
-            f"Head-tilt manager up: tilt to {self._down_angle:.3f} rad on "
-            f"'{self._cmd_topic}' when distance_remaining crosses <= {self._near} m "
-            f"(back to {self._default_angle:.3f} rad past {self._far} m)."
+            f"Head-tilt manager up ({'ENABLED' if self._enabled else 'DISABLED'}): tilt to "
+            f"{self._down_angle:.3f} rad on '{self._cmd_topic}' when distance_remaining "
+            f"crosses <= {self._near} m (back to {self._default_angle:.3f} rad past {self._far} m). "
+            f"Toggle via SetBool service '{enable_service_name}'."
         )
 
     @staticmethod
     def _clamp(angle):
         return max(-JOINT_LIMIT, min(JOINT_LIMIT, float(angle)))
+
+    def _set_enabled_cb(self, request, response):
+        self._enabled = bool(request.data)
+        if not self._enabled:
+            # Go silent immediately: drop any in-flight ramp so we stop publishing
+            # and leave the head wherever it is for the external controller.
+            self._ramp_active = False
+        else:
+            # Re-evaluate cleanly on the next feedback edge after regaining control.
+            self._down_sent = False
+        response.success = True
+        response.message = "enabled" if self._enabled else "disabled"
+        self.get_logger().info(f"Head-tilt {'ENABLED' if self._enabled else 'DISABLED'} via service")
+        return response
 
     def _feedback_cb(self, msg: FeedbackMessage):
         self._last_feedback_time = self.get_clock().now()
@@ -148,14 +197,23 @@ class HeadTiltNearGoal(Node):
             if self._down_sent:
                 self._command(self._default_angle, "default (new goal)")
             self._down_sent = False
+            self._approach_armed = False
             return
 
         distance = msg.feedback.distance_remaining
-        # distance_remaining is 0.0 until the first path is available; ignore it.
-        if distance <= 0.0:
+        # distance_remaining is 0.0 until the first path is available, and tiny
+        # for a heading-only / in-place-rotation goal; ignore anything at or
+        # below near_ignore_distance so such goals never drive the head.
+        if distance <= self._near_ignore:
             return
 
-        if distance <= self._near and not self._down_sent:
+        # Only treat this as a real approach once the robot has been clearly
+        # outside the near zone; a heading-only goal stays below `near` and so
+        # never arms, never tilts.
+        if distance > self._near:
+            self._approach_armed = True
+
+        if self._approach_armed and distance <= self._near and not self._down_sent:
             self._command(self._down_angle, "DOWN (near goal)")
             self._down_sent = True
         elif distance >= self._far and self._down_sent:
@@ -164,7 +222,7 @@ class HeadTiltNearGoal(Node):
 
     def _idle_watchdog(self):
         # Only acts if we tilted down and feedback then stopped (goal ended).
-        if not self._down_sent or self._last_feedback_time is None:
+        if not self._enabled or not self._down_sent or self._last_feedback_time is None:
             return
         idle = (self.get_clock().now() - self._last_feedback_time).nanoseconds * 1e-9
         if idle >= self._idle_timeout:
@@ -176,6 +234,9 @@ class HeadTiltNearGoal(Node):
         # timer streams the eased setpoints; we don't publish the full command
         # here. Retargeting an in-flight move just re-seeds the ramp from the
         # current setpoint, so motion stays continuous.
+        if not self._enabled:
+            # Disabled -> the external controller owns the head; stay silent.
+            return
         angle = self._clamp(angle)
         start = self._last_commanded_angle
         distance = abs(angle - start)
@@ -195,8 +256,8 @@ class HeadTiltNearGoal(Node):
         )
 
     def _profile_tick(self):
-        # Silent unless a move is in flight.
-        if not self._ramp_active:
+        # Silent unless a move is in flight (and we still own the head).
+        if not self._ramp_active or not self._enabled:
             return
         elapsed = (self.get_clock().now() - self._ramp_start_time).nanoseconds * 1e-9
         t = elapsed / self._ramp_duration if self._ramp_duration > 0.0 else 1.0

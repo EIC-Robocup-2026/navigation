@@ -14,7 +14,7 @@ def generate_launch_description():
 
     slam_launch_file = os.path.join(
         get_package_share_directory('slam_toolbox'),
-        'launch', 'online_async_launch.py'
+        'launch', 'online_sync_launch.py'
     )
 
     slam_toolbox_launch = IncludeLaunchDescription(
