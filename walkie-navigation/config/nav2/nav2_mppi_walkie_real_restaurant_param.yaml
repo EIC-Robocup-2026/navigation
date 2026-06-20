@@ -133,15 +133,17 @@ controller_server:
 
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
+      # plugin: "nav2_rotation_shim_controller::RotationShimController"
+      # primary_controller: "nav2_mppi_controller::MPPIController"
 
       # rootation shim
-      # angular_dist_threshold: 0.785
-      # forward_sampling_distance: 0.5
-      # rotate_to_heading_angular_vel: 3.0
-      # max_angular_accel: 6.0
-      # simulate_ahead_time: 1.0
-      # rotate_to_heading_once: True
-      # rotate_to_goal_heading: True
+      angular_dist_threshold: 0.785
+      forward_sampling_distance: 0.5
+      rotate_to_heading_angular_vel: 3.0
+      max_angular_accel: 6.0
+      simulate_ahead_time: 1.0
+      rotate_to_heading_once: True
+      rotate_to_goal_heading: True
 
       # MPPI core settings
       visualize: True
@@ -149,10 +151,8 @@ controller_server:
       model_dt: 0.05
       batch_size: 2000
 
-      # vx_std: 0.2
-      # vy_std: 0.1
-      vx_std: 0.25
-      vy_std: 0.15
+      vx_std: 0.2
+      vy_std: 0.1
       wz_std: 0.6                     # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.3
@@ -286,10 +286,8 @@ docking_server:
 local_costmap:
   local_costmap:
     ros__parameters:
-      # update_frequency: 5.0
-      # publish_frequency: 2.0
-      update_frequency: 10.0
-      publish_frequency: 5.0
+      update_frequency: 5.0
+      publish_frequency: 2.0
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: false
@@ -331,8 +329,7 @@ local_costmap:
       stvl_layer:
         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
         enabled: true
-        # voxel_decay: 5.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
-        voxel_decay: 1.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
+        voxel_decay: 5.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
         decay_model: 0
         voxel_size: 0.05
         track_unknown_space: false
@@ -396,8 +393,12 @@ global_costmap:
 
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      # plugins: ["static_layer", "obstacle_layer", "inflation_layer", "stvl_layer"]
+      plugins: ["static_layer", "obstacle_layer", "inflation_layer", "denoise_layer"]
+      denoise_layer:
+        plugin: "nav2_costmap_2d::DenoiseLayer"
+        enabled: true
+        minimal_group_size: 4
+        group_connectivity_type: 8
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -447,7 +448,7 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.5
+      tolerance: 2.0
       use_astar: false
       allow_unknown: true
 

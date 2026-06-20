@@ -123,7 +123,7 @@
                 </Inverter>
                 <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
                 <ClearEntireCostmap name="ClearGlobalCostmap-PlannerRecovery" service_name="global_costmap/clear_entirely_global_costmap"/>
-                <Wait wait_duration="2.0"/>
+                <!-- <Wait wait_duration="2.0"/> -->
               </Sequence>
             </RecoveryNode>
           </RateController>
@@ -147,7 +147,7 @@
                   <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
-                <Wait wait_duration="2.0"/>
+                <!-- <Wait wait_duration="2.0"/> -->
               </Sequence>
             </RecoveryNode>
 
@@ -158,15 +158,15 @@
 
           GoalUpdated → new goal arrived → SUCCESS → retry with new goal
 
-          Sequence(Inverter(IsGoalNearby), Wait 5s):
+          Sequence(Inverter(IsGoalNearby), Wait 2s):
             • Robot IS near goal (≤ 0.8 m):
                 Inverter(IsGoalNearby) = FAILURE → Sequence = FAILURE
                 → Fallback has nothing left → FAILURE
                 → RecoveryNode aborts immediately  ← robot stops near goal ✓
 
             • Robot is FAR from goal:
-                Inverter(IsGoalNearby) = SUCCESS → Wait 5s runs
-                (during this 5 s, dynamic-object voxels at 5 s decay time expire)
+                Inverter(IsGoalNearby) = SUCCESS → Wait 2s runs
+                (during this 2 s, dynamic-object voxels at 2 s decay time expire)
                 → Wait succeeds → Sequence = SUCCESS → Fallback = SUCCESS
                 → RecoveryNode retries navigation  ← dynamic obstacle may be gone ✓
       -->
@@ -176,7 +176,8 @@
           <Inverter>
             <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
           </Inverter>
-          <Wait wait_duration="5.0"/>
+          <!-- <Wait wait_duration="5.0"/> -->
+          <Wait wait_duration="2.0"/>
         </Sequence>
       </ReactiveFallback>
 

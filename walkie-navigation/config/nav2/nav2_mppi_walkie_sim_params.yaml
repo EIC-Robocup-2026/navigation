@@ -54,21 +54,42 @@ bt_navigator:
     default_server_timeout: 20
     wait_for_service_timeout: 1000
 
-    # default_nav_to_pose_bt_xml: (find-pkg-share robot_navigation) config/nav2/behavior_tree/nav_topose_no_spin_backup_bt.xml
+    # Custom BT node (appended to the built-in plugins): computes the spin needed
+    # to face the goal heading. Used in the failure path so an aborted goal still
+    # ends with the robot facing the commanded orientation.
+    plugin_lib_names:
+      - compute_goal_heading_spin_bt_node
+      - compute_goal_bearing_spin_bt_node
+      - compute_path_heading_spin_bt_node
 
+    default_nav_to_pose_bt_xml: $(find-pkg-share robot_navigation)/config/nav2/behavior_tree/nav_to_pose_real_recovery_bt.xml
+    # not real nav through poses
+    default_nav_through_poses_bt_xml: $(find-pkg-share robot_navigation)/config/nav2/behavior_tree/nav_to_pose_real_recovery_bt.xml
     error_code_name_prefixes:
       - assisted_teleop
-      - backup
       - compute_path
       - dock_robot
       - drive_on_heading
       - follow_path
       - nav_thru_poses
       - nav_to_pose
-      - spin
       - route
       - undock_robot
       - wait
+
+    navigators: ["navigate_to_pose", "navigate_through_poses"]
+
+    # 2. Configure the Groot2 Publisher for Navigate To Pose
+    navigate_to_pose:
+      plugin: "nav2_bt_navigator::NavigateToPoseNavigator"
+      enable_groot_monitoring: true
+      groot_server_port: 1669
+
+    # 3. Configure the Groot2 Publisher for Navigate Through Poses
+    navigate_through_poses:
+      plugin: "nav2_bt_navigator::NavigateThroughPosesNavigator"
+      enable_groot_monitoring: true
+      groot_server_port: 1667
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
@@ -100,64 +121,64 @@ controller_server:
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5
-      movement_time_allowance: 10.0
+      required_movement_radius: 0.5   # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
+      movement_time_allowance: 4.0    # was 10.0 — detect stuck in 4 s instead of 10 s
 
     # Goal checker parameters
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.2
-      yaw_goal_tolerance: 0.3
+      xy_goal_tolerance: 0.1
+      yaw_goal_tolerance: 0.01
 
     FollowPath:
       plugin: "nav2_mppi_controller::MPPIController"
-      # plugin: "nav2_rotation_shim_controller::RotationShimController"
-      # primary_controller: "nav2_mppi_controller::MPPIController"
 
       # rootation shim
-      angular_dist_threshold: 0.785
-      forward_sampling_distance: 0.5
-      rotate_to_heading_angular_vel: 3.0
-      max_angular_accel: 6.0
-      simulate_ahead_time: 1.0
-      rotate_to_heading_once: True
-      rotate_to_goal_heading: true
+      # angular_dist_threshold: 0.785
+      # forward_sampling_distance: 0.5
+      # rotate_to_heading_angular_vel: 3.0
+      # max_angular_accel: 6.0
+      # simulate_ahead_time: 1.0
+      # rotate_to_heading_once: True
+      # rotate_to_goal_heading: True
 
       # MPPI core settings
-      visualize: true
-      time_steps: 35
+      visualize: True
+      time_steps: 56
       model_dt: 0.05
       batch_size: 2000
 
-      vx_std: 0.1
-      vy_std: 0.1
-      wz_std: 0.6
+      # vx_std: 0.2
+      # vy_std: 0.1
+      vx_std: 0.25
+      vy_std: 0.15
+      wz_std: 0.6                     # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
-      vx_max: &velocity_value_p 1.0
-      vx_min: &velocity_value_n -1.0
+      vx_max: &velocity_value_p 0.3
+      vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.9
-      wz_min: -1.9
+      wz_max: 1.5                     # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
+      wz_min: -1.5
 
       ax_max: 2.5
       ax_min: -2.5
       ay_max: 2.5
       ay_min: -2.5
-      az_max: 3.2
+      az_max: 2.5
 
       iteration_count: 1
       prune_distance: 1.0
       transform_tolerance: 0.1
-      temperature: 0.3
+      temperature: 0.5
       gamma: 0.015
 
       motion_model: "Omni"
 
-      visualize: false
       reset_period: 1.0
       regenerate_noises: false
+
 
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -176,65 +197,71 @@ controller_server:
           "PathFollowCritic",
           "PathAngleCritic",
           "CostCritic",
+          "ObstaclesCritic",
           "TwirlingCritic",
-          # "ObstaclesCritic",
         ]
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5
-        critical_weight: 20.0
-        consider_footprint: false
+        repulsion_weight: 1.5         # pushes trajectories away from inflation zone
+        critical_weight: 20.0         # strong penalty for near-lethal cells
+        consider_footprint: true      # checks whole robot footprint, not just center
         collision_cost: 10000.0
         collision_margin_distance: 0.1
         near_goal_distance: 0.5
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
-        threshold_to_consider: 1.4
+        cost_weight: 3.0              # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
+        threshold_to_consider: 0.5
       GoalAngleCritic:
         enabled: true
-        cost_weight: 3.0
-        cost_power: 2
-        threshold_to_consider: 1.5
-        symmetric_yaw_tolerance: true
+        cost_weight: 12.0             # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
+        cost_power: 1
+        threshold_to_consider: 0.75   # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
+        symmetric_yaw_tolerance: false
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 14.0
+        cost_weight: 14.0             # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
         max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 4
+        trajectory_point_step: 3      # was 4 — denser alignment sampling, tighter tracking on curves
         threshold_to_consider: 0.5
         offset_from_furthest: 20
-        use_path_orientations: false
+        use_path_orientations: false  # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
+        cost_weight: 6.0
         offset_from_furthest: 5
-        threshold_to_consider: 1.5
+        threshold_to_consider: 0.5
       PathAngleCritic:
-        enabled: false
+        enabled: true
         cost_power: 1
-        cost_weight: 2.0
+        cost_weight: 16.0             # was 12.0 — stronger pull to face the path heading (drive forward)
         offset_from_furthest: 4
         threshold_to_consider: 0.5
-        max_angle_to_furthest: 1.0
-        mode: 0
+        max_angle_to_furthest: 0.4    # was 0.5 — start correcting heading sooner so it doesn't drift into a strafe
+        mode: 0                       # FORWARD_PREFERENCE: prefer facing the travel direction
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 4.0
-        critical_cost: 300.0
-        consider_footprint: false
+        cost_weight: 3.5              # was 0.2 — must compete with path critics (6–8)
+        critical_cost: 200.0          # was 350.0 — costmap max is 253, 350 never fires!
+        consider_footprint: true
         collision_cost: 1000000.0
-        near_goal_distance: 1.0
+        near_goal_distance: 0.5
         trajectory_point_step: 2
       TwirlingCritic:
         enabled: true
         twirling_cost_power: 1
-        twirling_cost_weight: 10.0
+        # was 10.0 — that strongly penalized rotating, so the omni robot followed
+        # turns by STRAFING instead of turning to face (sideways into doorways).
+        # Low value: still curbs pointless pirouettes but lets it rotate to face
+        # its travel direction. Strafing stays available (Omni model + vy kept).
+        # 2.0 -> 1.0: every rad/s of wz was still being taxed, slowing rotate-to-
+        # path and rotate-to-goal; halved so the angle critics win sooner.
+        twirling_cost_weight: 1.0
 
 docking_server:
   ros__parameters:
@@ -259,8 +286,10 @@ docking_server:
 local_costmap:
   local_costmap:
     ros__parameters:
-      update_frequency: 5.0
-      publish_frequency: 2.0
+      # update_frequency: 5.0
+      # publish_frequency: 2.0
+      update_frequency: 10.0
+      publish_frequency: 5.0
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: true
@@ -268,12 +297,18 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.15
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      # footprint_padding: 0.02
+
+      # NOTE (sim): real robot also runs an "stvl_layer" here fed by the 3D lidar
+      # (/unilidar) and the zed head camera. The sim spawns with use_zed:=false and
+      # has no 3D lidar, so those sources don't exist — the STVL layer is omitted
+      # and obstacle sensing relies on the 2D /scan voxel_layer below.
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.2
+        cost_scaling_factor: 8.0    # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
+        inflation_radius: 0.25      # just outside robot inscribed radius — keeps clearance tight
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -307,10 +342,13 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: true
-      robot_radius: 0.15
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      footprint_padding: 0.02
+
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
+      # plugins: ["static_layer", "obstacle_layer", "inflation_layer", "stvl_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -330,8 +368,15 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.6
+        # Lowered for the Lattice planner. 0.8 m made every doorway (<1.6 m gap)
+        # high-cost, so any planner avoided them. 0.35 m leaves the centre of a
+        # ~0.7 m+ doorway cost-free while still giving a standoff gradient near
+        # obstacles. Footprint clearance is now guaranteed by Lattice's SE2
+        # collision check + MPPI (consider_footprint), not by a huge inflation.
+        # If the robot hugs tables too closely, raise toward ~0.45 (but not so
+        # high it re-blocks your narrowest doorway).
+        cost_scaling_factor: 4.0    # gentle gradient: mild preference to centre in corridors
+        inflation_radius: 0.45      # ~0.05 m beyond circumscribed radius (0.30 m)
       always_send_full_costmap: True
 
 map_server:
@@ -353,7 +398,7 @@ planner_server:
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
-      tolerance: 0.25
+      tolerance: 0.5
       use_astar: false
       allow_unknown: true
 
@@ -388,15 +433,13 @@ behavior_server:
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
     behavior_plugins:
-      ["spin", "backup", "drive_on_heading", "assisted_teleop", "wait"]
-    spin:
-      plugin: "nav2_behaviors::Spin"
-    backup:
-      plugin: "nav2_behaviors::BackUp"
+      ["drive_on_heading", "assisted_teleop", "wait", "spin"]
     drive_on_heading:
       plugin: "nav2_behaviors::DriveOnHeading"
     wait:
       plugin: "nav2_behaviors::Wait"
+    spin:
+      plugin: "nav2_behaviors::Spin"   # used by the BT failure path to face the goal heading
     assisted_teleop:
       plugin: "nav2_behaviors::AssistedTeleop"
     global_frame: odom
@@ -404,8 +447,8 @@ behavior_server:
     transform_tolerance: 0.1
     use_sim_time: true
     simulate_ahead_time: 2.0
-    max_rotational_vel: 3.0
-    min_rotational_vel: 1.8
+    max_rotational_vel: 0.5
+    min_rotational_vel: -0.5
     rotational_acc_lim: 3.2
 
 robot_state_publisher:
@@ -445,25 +488,27 @@ collision_monitor:
     use_sim_time: true
     base_frame_id: base_footprint
     odom_frame_id: odom
-    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_in_topic: "/cmd_vel_controller"
     cmd_vel_out_topic: "/cmd_vel_nav"
+    # Sim has only the 2-D /scan (no 3-D /unilidar pointcloud), so the real
+    # robot's "pointcloud" source for tabletop obstacles is omitted here.
     observation_sources: ["scan"]
 
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonStop:
       type: "circle"
-      radius: 0.32
+      radius: 0.35              # just outside robot circumscribed radius (0.255 m)
       action_type: "stop"
-      min_points: 4
+      min_points: 4             # was 1 — a single lidar noise point latched a hard-stop; need a real cluster
       visualize: true
       polygon_pub_topic: "polygon_stop"
-      enabled: true
+      enabled: true             # was false — must be on to hard-stop at tabletop
     PolygonSlow:
       type: "circle"
-      radius: 0.50
+      radius: 0.55              # wider slow-down zone gives MPPI time to react
       action_type: "slowdown"
-      min_points: 4
-      slowdown_ratio: 0.5
+      min_points: 4             # was 2 — reject 1-2 point lidar noise spikes
+      slowdown_ratio: 0.4
       visualize: true
       polygon_pub_topic: "polygon_slowdown"
       enabled: true
@@ -526,5 +571,3 @@ collision_monitor:
       topic: /scan
       min_obstacle_height: 0.0
       max_obstacle_height: 2.0
-      clearing: True
-      marking: True
