@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Walkie Map Editor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="toolbar">
+  <div class="grp">
+    <label class="btn">Load folder
+      <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
+    </label>
+    <button id="export-btn" disabled>Export</button>
+    <input id="prefix-input" placeholder="prefix" size="14">
+  </div>
+
+  <div class="grp" data-group="pixel">
+    <span class="lbl">Pixel</span>
+    <button data-tool="pen">Pen</button>
+    <button data-tool="eraser">Eraser</button>
+    <button data-tool="restore">Restore</button>
+    <label>Brush <input id="brush" type="range" min="1" max="40" value="3"><span id="brush-val">3</span></label>
+  </div>
+
+  <div class="grp" data-group="shape">
+    <span class="lbl">Shape</span>
+    <button data-tool="select">Select</button>
+    <button data-tool="point">Point</button>
+    <button data-tool="rect">Rect</button>
+    <button data-tool="polygon">Polygon</button>
+    <button data-tool="line">Line</button>
+    <button data-tool="nogo">No-Go</button>
+    <select id="label-select"></select>
+    <button id="add-label">+</button>
+  </div>
+
+  <div class="grp">
+    <button id="undo">↶</button>
+    <button id="redo">↷</button>
+    <button id="fit">Fit</button>
+    <span id="zoom-info">100%</span>
+  </div>
+</header>
+
+<main>
+  <canvas id="cv"></canvas>
+  <aside id="side">
+    <h3>Map</h3>
+    <div id="map-info">No map loaded</div>
+    <h3>Elements <button id="clear-elems" class="mini">clear</button></h3>
+    <ul id="elem-list"></ul>
+    <h3>Help</h3>
+    <ul class="help">
+      <li>Wheel: zoom · Middle-drag: pan</li>
+      <li>Polygon: click to add, click near start to close</li>
+      <li>Line: click to add, right-click / Esc to finish</li>
+      <li>Select tool: click element to highlight</li>
+      <li>Double-click sidebar label to rename</li>
+      <li>Del key: delete selected element</li>
+    </ul>
+  </aside>
+</main>
+
+<div id="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
