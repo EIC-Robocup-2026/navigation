@@ -5,6 +5,7 @@
 
 const DEFAULT_LABELS = ['table', 'shelf', 'chair', 'sofa', 'tv', 'food', 'drink'];
 const FREE = 254, OCC = 0;
+const KIND_LABELS = { point: 'point', rect: 'rect', polygon: 'polygon', nogo: 'no-go' };
 
 const state = {
   meta: null,
@@ -22,7 +23,11 @@ const state = {
   redo: [],
   drawing: null,
   currentStroke: null,
+  prevPaintPt: null,
   dirty: false,
+  hiddenLabels: new Set(),
+  hiddenKinds: new Set(),
+  showIds: true,
 };
 
 function markDirty() { state.dirty = true; }
@@ -52,7 +57,7 @@ function parsePGM(buf) {
   const magic = tok();
   if (magic !== 'P5') throw new Error('not P5 PGM: ' + magic);
   const w = parseInt(tok()), h = parseInt(tok()), max = parseInt(tok());
-  i++; // single whitespace after maxval per spec
+  i++;
   const pixels = new Uint8Array(u8.buffer, u8.byteOffset + i, w * h).slice();
   return { w, h, max, pixels };
 }
@@ -89,80 +94,136 @@ async function loadFolder(files) {
     if (n.endsWith('_og.pgm')) og = f;
     else if (n.endsWith('.pgm') && !n.endsWith('_keepout.pgm')) pgm = pgm || f;
     else if (n.endsWith('.yaml') || n.endsWith('.yml')) yaml = f;
-    else if (n.endsWith('_element.json')) elemJson = f;
+    else if (n.endsWith('_element.json') || n.endsWith('_elements.json')) elemJson = f;
   }
   if (!pgm) { status('error: no .pgm in folder'); return; }
   if (!yaml) { status('error: no .yaml in folder'); return; }
 
-  const pgmBuf = await pgm.arrayBuffer();
-  const yamlText = await yaml.text();
-  const parsed = parsePGM(pgmBuf);
-  const meta = parseYAML(yamlText);
+  const parsed = parsePGM(await pgm.arrayBuffer());
+  const meta = parseYAML(await yaml.text());
 
   state.meta = meta;
   state.w = parsed.w; state.h = parsed.h;
   state.pixels = parsed.pixels;
   let ogNote = '';
   if (og) {
-    const ogBuf = await og.arrayBuffer();
-    const ogP = parsePGM(ogBuf);
+    const ogP = parsePGM(await og.arrayBuffer());
     if (ogP.w === parsed.w && ogP.h === parsed.h) state.original = ogP.pixels;
-    else { state.original = parsed.pixels.slice(); ogNote = ' (og dims mismatch, using map.pgm as baseline)'; }
+    else { state.original = parsed.pixels.slice(); ogNote = ' (og dims mismatch)'; }
   } else {
     state.original = parsed.pixels.slice();
-    ogNote = ' (no _og.pgm; Restore will revert to as-loaded only)';
+    ogNote = ' (no _og.pgm; Restore = as-loaded)';
   }
-  state.prefix = (pgm.name.replace(/_og\.pgm$|\.pgm$/i, '')) || 'map';
+  state.prefix = pgm.name.replace(/_og\.pgm$|\.pgm$/i, '') || 'map';
   $('#prefix-input').value = state.prefix;
 
   state.elements = [];
+  state.hiddenLabels.clear();
+  state.hiddenKinds.clear();
+  let loadedCount = 0;
   if (elemJson) {
     try {
       const j = JSON.parse(await elemJson.text());
-      state.elements = j.elements || [];
-      if (j.labels) {
-        for (const l of j.labels) if (!state.labels.includes(l)) state.labels.push(l);
+      state.elements = (j.elements || []).map(normalizeElement);
+      loadedCount = state.elements.length;
+      if (Array.isArray(j.labels)) {
+        for (const l of j.labels) if (typeof l === 'string' && !state.labels.includes(l)) state.labels.push(l);
       }
     } catch (e) { console.warn('bad element json', e); }
   }
+  // advance nextId past any loaded ids
+  let maxId = 0;
+  for (const e of state.elements) {
+    const m = String(e.id || '').match(/^e(\d+)/);
+    if (m) maxId = Math.max(maxId, +m[1]);
+  }
+  nextId = maxId + 1;
+
   rebuildLabelSelect();
   rebuildElemList();
+  rebuildVisibility();
   renderPixels();
   fitView();
   updateInfo();
   $('#export-btn').disabled = false;
   state.dirty = false;
-  status(`loaded ${pgm.name} ${parsed.w}×${parsed.h}${ogNote}`);
+  status(`loaded ${pgm.name} ${parsed.w}×${parsed.h}${ogNote}; elements: ${loadedCount}`);
 }
 
-function exportAll() {
+function normalizeElement(e) {
+  return {
+    id: e.id || `e${nextId++}`,
+    label: e.label || 'unknown',
+    type: e.type || 'polygon',
+    closed: !!e.closed,
+    asNogo: !!e.asNogo,
+    coords: Array.isArray(e.coords) ? e.coords.map(c => [+c[0], +c[1]]) : [],
+  };
+}
+
+function dateStamp() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+}
+
+function buildExportFiles(prefix) {
+  const meta = { ...state.meta, image: `${prefix}.pgm` };
+  return [
+    [`${prefix}_og.pgm`, writePGM(state.w, state.h, state.original)],
+    [`${prefix}.pgm`, writePGM(state.w, state.h, state.pixels)],
+    [`${prefix}.yaml`, new TextEncoder().encode(writeYAML(meta))],
+    [`${prefix}_element.json`,
+      new TextEncoder().encode(JSON.stringify({ labels: state.labels, elements: state.elements }, null, 2))],
+    [`${prefix}_keepout.pgm`, writePGM(state.w, state.h, buildKeepout())],
+  ];
+}
+
+async function exportAll() {
   if (!state.meta) return;
   const prefix = ($('#prefix-input').value || 'map').replace(/[^\w\-]/g, '_');
-  const meta = { ...state.meta, image: `${prefix}.pgm` };
-  download(`${prefix}_og.pgm`, writePGM(state.w, state.h, state.original), 'application/octet-stream');
-  download(`${prefix}.pgm`, writePGM(state.w, state.h, state.pixels), 'application/octet-stream');
-  download(`${prefix}.yaml`, new TextEncoder().encode(writeYAML(meta)), 'text/yaml');
-  download(`${prefix}_element.json`, new TextEncoder().encode(
-    JSON.stringify({ labels: state.labels, elements: state.elements }, null, 2)
-  ), 'application/json');
-  download(`${prefix}_keepout.pgm`, writePGM(state.w, state.h, buildKeepout()), 'application/octet-stream');
-  state.dirty = false;
-  status(`exported 5 files with prefix "${prefix}"`);
-}
+  const folderName = `${prefix}_${dateStamp()}`;
+  const files = buildExportFiles(prefix);
 
-window.addEventListener('beforeunload', (ev) => {
-  if (state.dirty) { ev.preventDefault(); ev.returnValue = ''; }
-});
+  if (window.showDirectoryPicker) {
+    try {
+      const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      const subDir = await dirHandle.getDirectoryHandle(folderName, { create: true });
+      for (const [name, bytes] of files) {
+        const fh = await subDir.getFileHandle(name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(bytes);
+        await w.close();
+      }
+      state.dirty = false;
+      status(`exported → ${folderName}/`);
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') { status('export cancelled'); return; }
+      console.warn('folder picker failed, falling back to downloads', e);
+    }
+  }
+  // Fallback: individual downloads, name-prefixed so user can group manually
+  for (const [name, bytes] of files) {
+    const type = name.endsWith('.json') ? 'application/json'
+      : name.endsWith('.yaml') ? 'text/yaml' : 'application/octet-stream';
+    download(`${folderName}__${name}`, bytes, type);
+  }
+  state.dirty = false;
+  status(`exported 5 files (prefixed ${folderName}__)`);
+}
 
 function buildKeepout() {
   const px = new Uint8Array(state.w * state.h).fill(FREE);
   for (const e of state.elements) {
-    if (e.type !== 'nogo') continue;
+    const usesAsNogo = e.type === 'nogo' || (e.asNogo && e.closed);
+    if (!usesAsNogo) continue;
+    if (e.coords.length < 3) continue;
     const poly = e.coords.map(([wx, wy]) => {
       const p = worldToPx(wx, wy);
       return [p.px, p.py];
     });
-    if (poly.length >= 3) rasterPoly(px, state.w, state.h, poly, OCC);
+    rasterPoly(px, state.w, state.h, poly, OCC);
   }
   return px;
 }
@@ -270,11 +331,24 @@ function drawOrigin() {
   ctx.fillText('(0,0)', o.px + r, o.py - r);
 }
 
+function kindOf(e) {
+  if (e.type === 'nogo') return 'nogo';
+  if (e.type === 'rect') return 'rect';
+  if (e.type === 'point') return 'point';
+  return 'polygon';
+}
+
+function isVisible(e) {
+  return !state.hiddenLabels.has(e.label) && !state.hiddenKinds.has(kindOf(e));
+}
+
 function drawElements() {
-  for (const e of state.elements) drawElement(e, state.selected === e.id);
+  for (const e of state.elements) {
+    if (!isVisible(e)) continue;
+    drawElement(e, state.selected === e.id);
+  }
   if (state.drawing) {
     drawElement(state.drawing, true, true);
-    // rubber-band line from last vertex to cursor (polygon/line/nogo only)
     if (cursorPx && state.drawing.type !== 'rect' && state.drawing.coords.length) {
       const last = state.drawing.coords[state.drawing.coords.length - 1];
       const lp = worldToPx(last[0], last[1]);
@@ -292,10 +366,11 @@ function drawElements() {
 }
 
 function drawElement(e, selected, preview = false) {
-  const col = e.type === 'nogo' ? '#ff4444' : selected ? '#ffeb3b' : '#22d3ee';
+  const nogoFill = e.type === 'nogo' || (e.asNogo && e.closed);
+  const col = nogoFill ? '#ff4444' : selected ? '#ffeb3b' : '#22d3ee';
   ctx.lineWidth = (selected ? 2 : 1.5) / state.view.s;
   ctx.strokeStyle = col;
-  ctx.fillStyle = e.type === 'nogo' ? 'rgba(255,68,68,0.25)' : 'rgba(34,211,238,0.15)';
+  ctx.fillStyle = nogoFill ? 'rgba(255,68,68,0.25)' : 'rgba(34,211,238,0.15)';
   const pts = e.coords.map(([wx, wy]) => worldToPx(wx, wy));
   if (e.type === 'point') {
     const p = pts[0];
@@ -316,7 +391,8 @@ function drawElement(e, selected, preview = false) {
   if (!preview && pts.length) {
     ctx.fillStyle = col;
     ctx.font = `${11 / state.view.s}px sans-serif`;
-    ctx.fillText(e.label, pts[0].px + 5 / state.view.s, pts[0].py - 5 / state.view.s);
+    const tag = state.showIds ? `#${e.id} ${e.label}` : e.label;
+    ctx.fillText(tag, pts[0].px + 5 / state.view.s, pts[0].py - 5 / state.view.s);
   }
 }
 
@@ -324,8 +400,9 @@ function drawCursor() {
   if (!cursorPx || !['pen','eraser','restore'].includes(state.tool)) return;
   ctx.strokeStyle = state.tool === 'pen' ? '#000' : state.tool === 'eraser' ? '#fff' : '#0f0';
   ctx.lineWidth = 1 / state.view.s;
+  const r = brushRadius();
   ctx.beginPath();
-  ctx.arc(cursorPx.px, cursorPx.py, state.brush, 0, Math.PI * 2);
+  ctx.arc(cursorPx.px, cursorPx.py, Math.max(r, 0.5), 0, Math.PI * 2);
   ctx.stroke();
 }
 
@@ -348,18 +425,32 @@ function drawScaleBar() {
 
 // ───── Pixel tools ──────────────────────────────────────────────────
 
+// brush "size" semantics: size=1 → exactly 1 pixel. size=N → disk of width N.
+function brushRadius() { return state.brush / 2; }
+
 function paintBrush(px, py) {
-  const r = state.brush;
-  const r2 = r * r;
-  const x0 = Math.max(0, Math.floor(px - r));
-  const x1 = Math.min(state.w - 1, Math.ceil(px + r));
-  const y0 = Math.max(0, Math.floor(py - r));
-  const y1 = Math.min(state.h - 1, Math.ceil(py + r));
+  const r = brushRadius();
+  const cx = Math.round(px), cy = Math.round(py);
+  let x0, x1, y0, y1, r2;
+  if (state.brush <= 1) {
+    x0 = x1 = cx; y0 = y1 = cy; r2 = -1; // sentinel: include center only
+  } else {
+    x0 = Math.max(0, Math.floor(px - r));
+    x1 = Math.min(state.w - 1, Math.ceil(px + r));
+    y0 = Math.max(0, Math.floor(py - r));
+    y1 = Math.min(state.h - 1, Math.ceil(py + r));
+    r2 = r * r;
+  }
   if (x1 < x0 || y1 < y0) return;
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
-      const dx = x - px, dy = y - py;
-      if (dx*dx + dy*dy > r2) continue;
+      if (r2 < 0) {
+        if (x !== cx || y !== cy) continue;
+      } else {
+        const dx = x + 0.5 - px, dy = y + 0.5 - py;
+        if (dx*dx + dy*dy > r2) continue;
+      }
+      if (x < 0 || y < 0 || x >= state.w || y >= state.h) continue;
       const i = y * state.w + x;
       let v;
       if (state.tool === 'pen') v = OCC;
@@ -370,14 +461,33 @@ function paintBrush(px, py) {
       state.pixels[i] = v;
     }
   }
-  const id = offCtx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-  for (let y = y0, k = 0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++, k += 4) {
+  const xs = Math.max(0, x0), xe = Math.min(state.w - 1, x1);
+  const ys = Math.max(0, y0), ye = Math.min(state.h - 1, y1);
+  if (xs > xe || ys > ye) return;
+  const id = offCtx.getImageData(xs, ys, xe - xs + 1, ye - ys + 1);
+  for (let y = ys, k = 0; y <= ye; y++) {
+    for (let x = xs; x <= xe; x++, k += 4) {
       const g = state.pixels[y * state.w + x];
       id.data[k] = g; id.data[k+1] = g; id.data[k+2] = g; id.data[k+3] = 255;
     }
   }
-  offCtx.putImageData(id, x0, y0);
+  offCtx.putImageData(id, xs, ys);
+}
+
+// Bresenham-like interpolation between consecutive mouse events.
+function strokeTo(px, py) {
+  if (state.prevPaintPt) {
+    const [px0, py0] = state.prevPaintPt;
+    const dist = Math.hypot(px - px0, py - py0);
+    const steps = Math.max(1, Math.ceil(dist));
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      paintBrush(px0 + (px - px0) * t, py0 + (py - py0) * t);
+    }
+  } else {
+    paintBrush(px, py);
+  }
+  state.prevPaintPt = [px, py];
 }
 
 // ───── Polygon raster (even-odd scanline) ───────────────────────────
@@ -411,8 +521,8 @@ function rasterPoly(out, w, h, poly, val) {
 // ───── Undo / redo ──────────────────────────────────────────────────
 
 function pushUndo(act) { state.undo.push(act); state.redo.length = 0; if (state.undo.length > 100) state.undo.shift(); }
-function undo() { const a = state.undo.pop(); if (a) { applyInverse(a); state.redo.push(a); markDirty(); rebuildElemList(); draw(); } }
-function redoFn() { const a = state.redo.pop(); if (a) { applyForward(a); state.undo.push(a); markDirty(); rebuildElemList(); draw(); } }
+function undo() { const a = state.undo.pop(); if (a) { applyInverse(a); state.redo.push(a); markDirty(); rebuildElemList(); rebuildVisibility(); draw(); } }
+function redoFn() { const a = state.redo.pop(); if (a) { applyForward(a); state.undo.push(a); markDirty(); rebuildElemList(); rebuildVisibility(); draw(); } }
 
 function applyInverse(a) {
   if (a.kind === 'pixel') {
@@ -422,6 +532,8 @@ function applyInverse(a) {
     state.elements = state.elements.filter(e => e.id !== a.el.id);
   } else if (a.kind === 'elem-del') {
     state.elements.push(a.el);
+  } else if (a.kind === 'elem-mod') {
+    Object.assign(a.el, a.before);
   }
 }
 function applyForward(a) {
@@ -432,6 +544,8 @@ function applyForward(a) {
     state.elements.push(a.el);
   } else if (a.kind === 'elem-del') {
     state.elements = state.elements.filter(e => e.id !== a.el.id);
+  } else if (a.kind === 'elem-mod') {
+    Object.assign(a.el, a.after);
   }
 }
 
@@ -441,14 +555,19 @@ let cursorPx = null;
 let panning = null;
 let painting = false;
 
+function isPanTrigger(ev) {
+  return ev.button === 1 || (ev.button === 0 && (ev.altKey || ev.ctrlKey || ev.metaKey));
+}
+
 canvas.addEventListener('mousedown', (ev) => {
   if (!state.meta) return;
-  if (ev.button === 1 || (ev.button === 0 && ev.altKey)) {
+  if (isPanTrigger(ev)) {
     panning = { sx: ev.clientX, sy: ev.clientY, vx: state.view.x, vy: state.view.y };
+    ev.preventDefault();
     return;
   }
   if (ev.button === 2) {
-    if (state.drawing && (state.tool === 'polygon' || state.tool === 'line' || state.tool === 'nogo')) {
+    if (state.drawing && (state.tool === 'polygon' || state.tool === 'nogo')) {
       finishPoly(false);
     }
     return;
@@ -468,21 +587,22 @@ canvas.addEventListener('mousedown', (ev) => {
   if (['pen', 'eraser', 'restore'].includes(state.tool)) {
     painting = true;
     state.currentStroke = new Map();
-    paintBrush(p.px, p.py);
+    state.prevPaintPt = null;
+    strokeTo(p.px, p.py);
     draw();
   } else if (state.tool === 'point') {
-    addElement({ type: 'point', label: currentLabel(), coords: [[w.wx, w.wy]], closed: false });
+    addElement({ type: 'point', label: currentLabel(), coords: [[w.wx, w.wy]], closed: false, asNogo: false });
   } else if (state.tool === 'rect') {
-    state.drawing = { id: 'tmp', label: currentLabel(), type: 'rect', coords: [[w.wx, w.wy], [w.wx, w.wy]], closed: true };
-  } else if (state.tool === 'polygon' || state.tool === 'line' || state.tool === 'nogo') {
+    state.drawing = { id: 'tmp', label: currentLabel(), type: 'rect', coords: [[w.wx, w.wy], [w.wx, w.wy]], closed: true, asNogo: false };
+  } else if (state.tool === 'polygon' || state.tool === 'nogo') {
     if (!state.drawing) {
       const t = state.tool === 'nogo' ? 'nogo' : 'polygon';
-      state.drawing = { id: 'tmp', label: state.tool === 'nogo' ? 'no-go' : currentLabel(), type: t, coords: [[w.wx, w.wy]], closed: false };
+      state.drawing = { id: 'tmp', label: state.tool === 'nogo' ? 'no-go' : currentLabel(), type: t, coords: [[w.wx, w.wy]], closed: false, asNogo: false };
     } else {
       const start = state.drawing.coords[0];
       const startPx = worldToPx(start[0], start[1]);
       const dist = Math.hypot(startPx.px - p.px, startPx.py - p.py);
-      if (state.tool !== 'line' && state.drawing.coords.length >= 3 && dist * state.view.s < 8) {
+      if (state.drawing.coords.length >= 3 && dist * state.view.s < 8) {
         finishPoly(true);
       } else {
         state.drawing.coords.push([w.wx, w.wy]);
@@ -503,10 +623,10 @@ canvas.addEventListener('mousemove', (ev) => {
   const p = screenToPx(ev.clientX, ev.clientY);
   const w = screenToWorld(ev.clientX, ev.clientY);
   cursorPx = p;
-  status(`world (${w.wx.toFixed(3)}, ${w.wy.toFixed(3)}) m   px (${Math.floor(p.px)}, ${Math.floor(p.py)})`);
+  status(`world (${w.wx.toFixed(3)}, ${w.wy.toFixed(3)}) m   px (${Math.floor(p.px)}, ${Math.floor(p.py)})   tool: ${state.tool}`);
 
   if (painting) {
-    paintBrush(p.px, p.py);
+    strokeTo(p.px, p.py);
   } else if (state.drawing) {
     if (state.drawing.type === 'rect') {
       state.drawing.coords[1] = [w.wx, w.wy];
@@ -519,6 +639,7 @@ canvas.addEventListener('mouseup', (ev) => {
   if (panning) { panning = null; return; }
   if (painting) {
     painting = false;
+    state.prevPaintPt = null;
     if (state.currentStroke && state.currentStroke.size) {
       const newV = new Map();
       for (const [i] of state.currentStroke) newV.set(i, state.pixels[i]);
@@ -529,7 +650,7 @@ canvas.addEventListener('mouseup', (ev) => {
   }
   if (state.tool === 'rect' && state.drawing) {
     const c = state.drawing.coords;
-    const el = { type: 'rect', label: currentLabel(),
+    const el = { type: 'rect', label: currentLabel(), asNogo: false,
       coords: [[c[0][0], c[0][1]], [c[1][0], c[0][1]], [c[1][0], c[1][1]], [c[0][0], c[1][1]]], closed: true };
     state.drawing = null;
     addElement(el);
@@ -564,17 +685,21 @@ window.addEventListener('keydown', (ev) => {
   else if ((ev.ctrlKey || ev.metaKey) && (ev.key === 'y' || (ev.shiftKey && ev.key === 'Z'))) { ev.preventDefault(); redoFn(); }
 });
 
+window.addEventListener('beforeunload', (ev) => {
+  if (state.dirty) { ev.preventDefault(); ev.returnValue = ''; }
+});
+
 function finishPoly(closed) {
   if (!state.drawing) return;
   const minPts = closed ? 3 : 2;
   if (state.drawing.coords.length < minPts) { state.drawing = null; draw(); return; }
-  const el = { type: state.drawing.type, label: state.drawing.label,
+  const el = { type: state.drawing.type, label: state.drawing.label, asNogo: false,
     coords: state.drawing.coords, closed };
   state.drawing = null;
   addElement(el);
 }
 
-// ───── Element list ─────────────────────────────────────────────────
+// ───── Element list / hit-test ──────────────────────────────────────
 
 let nextId = 1;
 function addElement(el) {
@@ -583,6 +708,7 @@ function addElement(el) {
   pushUndo({ kind: 'elem-add', el });
   markDirty();
   rebuildElemList();
+  rebuildVisibility();
   draw();
 }
 function deleteElement(id) {
@@ -593,24 +719,37 @@ function deleteElement(id) {
   pushUndo({ kind: 'elem-del', el });
   markDirty();
   rebuildElemList();
+  rebuildVisibility();
   draw();
 }
 function renameElement(id, label) {
   const el = state.elements.find(e => e.id === id);
   if (!el || !label || el.label === label) return;
+  const before = { label: el.label };
   el.label = label;
   if (!state.labels.includes(label)) { state.labels.push(label); rebuildLabelSelect(); }
+  pushUndo({ kind: 'elem-mod', el, before, after: { label } });
+  markDirty();
+  rebuildElemList();
+  rebuildVisibility();
+  draw();
+}
+function toggleAsNogo(id) {
+  const el = state.elements.find(e => e.id === id);
+  if (!el || !el.closed || el.type === 'nogo') return;
+  const before = { asNogo: el.asNogo };
+  el.asNogo = !el.asNogo;
+  pushUndo({ kind: 'elem-mod', el, before, after: { asNogo: el.asNogo } });
   markDirty();
   rebuildElemList();
   draw();
 }
 
-// hit-test in world coords; returns element id or null
 function hitTest(wx, wy) {
-  const tol = 6 / state.view.s * state.meta.resolution; // 6 screen px in meters
-  // iterate top-down (later-drawn first)
+  const tol = 6 / state.view.s * state.meta.resolution;
   for (let i = state.elements.length - 1; i >= 0; i--) {
     const e = state.elements[i];
+    if (!isVisible(e)) continue;
     const pts = e.coords;
     if (e.type === 'point') {
       const [x, y] = pts[0];
@@ -648,28 +787,90 @@ function rebuildElemList() {
   for (const e of state.elements) {
     const li = document.createElement('li');
     if (state.selected === e.id) li.className = 'sel';
-    const span = document.createElement('span');
-    span.textContent = e.label + ' ';
+    if (!isVisible(e)) li.classList.add('hidden');
+
+    const main = document.createElement('span');
+    main.className = 'main';
+    const idTag = document.createElement('code');
+    idTag.className = 'eid';
+    idTag.textContent = '#' + e.id;
+    main.appendChild(idTag);
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = ' ' + e.label + ' ';
+    main.appendChild(labelSpan);
     const em = document.createElement('em');
-    em.style.color = '#888';
-    em.textContent = e.type;
-    span.appendChild(em);
+    em.textContent = kindOf(e) + (e.asNogo ? '+nogo' : '');
+    main.appendChild(em);
+
+    const actions = document.createElement('span');
+    actions.className = 'acts';
+    if (e.closed && e.type !== 'nogo') {
+      const nogoBtn = document.createElement('button');
+      nogoBtn.className = 'mini';
+      nogoBtn.textContent = e.asNogo ? 'nogo✓' : 'nogo';
+      nogoBtn.title = 'mask this shape into _keepout.pgm';
+      nogoBtn.onclick = (ev) => { ev.stopPropagation(); toggleAsNogo(e.id); };
+      actions.appendChild(nogoBtn);
+    }
     const x = document.createElement('span');
     x.className = 'x'; x.textContent = '×';
-    li.appendChild(span); li.appendChild(x);
-    li.onclick = (ev) => { if (ev.target !== x) { state.selected = e.id; rebuildElemList(); draw(); } };
+    actions.appendChild(x);
+
+    li.appendChild(main); li.appendChild(actions);
+
+    li.onclick = (ev) => { if (ev.target.closest('.acts')) return; state.selected = e.id; rebuildElemList(); draw(); };
     li.ondblclick = (ev) => {
-      if (ev.target === x) return;
+      if (ev.target.closest('.acts')) return;
       const input = document.createElement('input');
       input.value = e.label; input.size = 12;
       input.onclick = (e2) => e2.stopPropagation();
       input.onkeydown = (e2) => { if (e2.key === 'Enter') input.blur(); if (e2.key === 'Escape') { input.value = e.label; input.blur(); } };
       input.onblur = () => renameElement(e.id, input.value.trim());
-      li.replaceChild(input, span);
+      li.replaceChild(input, main);
       input.focus(); input.select();
     };
     x.onclick = (ev) => { ev.stopPropagation(); deleteElement(e.id); };
     ul.appendChild(li);
+  }
+  $('#elem-count').textContent = state.elements.length;
+}
+
+// ───── Visibility (label + kind filters) ────────────────────────────
+
+function rebuildVisibility() {
+  const labels = [...new Set(state.elements.map(e => e.label))].sort();
+  const kinds = [...new Set(state.elements.map(kindOf))].sort();
+  fillFilter('#filter-labels', labels, state.hiddenLabels);
+  fillFilter('#filter-kinds', kinds, state.hiddenKinds);
+}
+
+function fillFilter(sel, items, hiddenSet) {
+  const root = $(sel);
+  while (root.firstChild) root.removeChild(root.firstChild);
+  if (!items.length) {
+    const span = document.createElement('span');
+    span.className = 'muted';
+    span.textContent = '(empty)';
+    root.appendChild(span);
+    return;
+  }
+  for (const it of items) {
+    const id = `${sel.slice(1)}-${it}`;
+    const row = document.createElement('label');
+    row.className = 'filter-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !hiddenSet.has(it);
+    cb.onchange = () => {
+      if (cb.checked) hiddenSet.delete(it); else hiddenSet.add(it);
+      rebuildElemList();
+      draw();
+    };
+    row.appendChild(cb);
+    const name = document.createElement('span');
+    name.textContent = ' ' + it;
+    row.appendChild(name);
+    root.appendChild(row);
   }
 }
 
@@ -677,11 +878,13 @@ function rebuildElemList() {
 
 function rebuildLabelSelect() {
   const sel = $('#label-select');
+  const cur = sel.value;
   while (sel.firstChild) sel.removeChild(sel.firstChild);
   for (const l of state.labels) {
     const o = document.createElement('option'); o.value = l; o.textContent = l;
     sel.appendChild(o);
   }
+  if (state.labels.includes(cur)) sel.value = cur;
   saveLabels();
 }
 function currentLabel() { return $('#label-select').value || state.labels[0] || 'unknown'; }
@@ -715,6 +918,7 @@ $('#clear-elems').addEventListener('click', () => {
   if (!confirm(`delete all ${state.elements.length} elements?`)) return;
   for (const e of [...state.elements]) deleteElement(e.id);
 });
+$('#toggle-ids').addEventListener('change', (ev) => { state.showIds = ev.target.checked; draw(); });
 
 document.querySelectorAll('button[data-tool]').forEach(b => {
   b.addEventListener('click', () => setTool(b.dataset.tool));
@@ -723,6 +927,8 @@ function setTool(t) {
   state.tool = t;
   state.drawing = null;
   document.querySelectorAll('button[data-tool]').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
+  canvas.style.cursor = ({ select: 'pointer', point: 'crosshair', rect: 'crosshair',
+    polygon: 'crosshair', nogo: 'crosshair', pen: 'none', eraser: 'none', restore: 'none' }[t]) || 'crosshair';
   draw();
 }
 
@@ -763,13 +969,13 @@ window.addEventListener('resize', () => draw());
 
 loadLabels();
 rebuildLabelSelect();
+rebuildVisibility();
 setTool('pen');
 draw();
 status('drag a map folder to begin');
 
-// ───── Self-check (run in console: window._test()) ──────────────────
+// Self-check: window._test()
 window._test = function () {
-  // ponytail: minimal round-trip, asserts in console
   const w = 4, h = 3;
   const px = new Uint8Array([0,128,255,0, 50,100,150,200, 10,20,30,40]);
   const buf = writePGM(w, h, px);
