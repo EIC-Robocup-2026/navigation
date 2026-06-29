@@ -1,3 +1,7 @@
 [submodule "navigation2"]
 	path = navigation2
 	url = https://github.com/ros-navigation/navigation2
+[submodule "walkie-navigation/map"]
+	path = walkie-navigation/map
+	url = git@github.com:EIC-Robocup-2026/map-collection.git
+	branch = main
