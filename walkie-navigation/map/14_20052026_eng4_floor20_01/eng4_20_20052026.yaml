@@ -1,7 +1,0 @@
-image: eng4_20_20052026.pgm
-mode: trinary
-resolution: 0.050
-origin: [-2.273, -7.877, 0]
-negate: 0
-occupied_thresh: 0.65
-free_thresh: 0.196
