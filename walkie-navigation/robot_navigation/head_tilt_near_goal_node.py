@@ -20,9 +20,14 @@ It does NOT own the head. It starts a SINGLE move on the moments that matter and
 is otherwise silent, so any other system can drive the head between those
 moments:
 
+  * a NEW goal arrives            -> move head to `default_angle`    (once)
   * crossing INTO  near_distance  -> move head down to `down_angle`  (once)
   * crossing OUT of far_distance  -> move head to `default_angle`    (once)
   * goal ends (feedback idle)     -> move head to `default_angle`    (once)
+
+The new-goal reset is unconditional (it does not depend on whether WE tilted the
+head down) so the head is brought back to the default pose even if some other
+controller left it elsewhere; `_command` no-ops when already there.
 
 The latch re-arms on every new goal, so it tilts on every approach (it never
 relies on a remembered "current pose", which would silently desync if anything
@@ -191,11 +196,16 @@ class HeadTiltNearGoal(Node):
 
         goal_id = bytes(msg.goal_id.uuid)
         if goal_id != self._last_goal_id:
-            # New goal -> re-arm. If we were left tilted from a previous approach,
-            # restore the default once so this approach starts clean.
+            # New goal -> re-arm and restore the default head pose once so every
+            # approach starts clean. We command this unconditionally (not just when
+            # _down_sent): the head may have been left non-default by something we
+            # don't track -- the external camera agent, or a yield/resume of the
+            # enable service -- and _down_sent only remembers OUR own down-tilts, so
+            # gating on it would leave the head stuck down in those cases. _command
+            # no-ops when already at default and stays silent while disabled, so a
+            # yielding external controller is still never overridden.
             self._last_goal_id = goal_id
-            if self._down_sent:
-                self._command(self._default_angle, "default (new goal)")
+            self._command(self._default_angle, "default (new goal)")
             self._down_sent = False
             self._approach_armed = False
             return
