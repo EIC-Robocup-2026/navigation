@@ -135,7 +135,7 @@
             no stop).
           -->
           <RecoveryNode number_of_retries="2" name="FollowPath">
-              <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+              <FollowPath path="{path}" controller_id="{selected_controller}" goal_checker_id="{selected_goal_checker}" error_code_id="{follow_path_error_code}"/>
               <!--
                 Near goal: skip the retry entirely — no second MPPI run, no more sideways movement.
                 Sequence fails immediately → RecoveryNode fails → PipelineSequence fails
