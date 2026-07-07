@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Walkie Map Editor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="toolbar">
+  <div class="grp">
+    <label class="btn" title="Pick a folder containing map.pgm + map.yaml">Load folder
+      <input id="folder-input" type="file" webkitdirectory directory multiple hidden>
+    </label>
+    <button id="export-btn" disabled title="Export 5 files into a new dated subfolder">Export</button>
+    <input id="prefix-input" placeholder="prefix" size="12" title="File name prefix used on export">
+  </div>
+
+  <div class="grp" data-group="pixel">
+    <span class="lbl">Pixel</span>
+    <button data-tool="pen" title="Paint occupied (black)">Pen</button>
+    <button data-tool="eraser" title="Paint free (white)">Eraser</button>
+    <button data-tool="restore" title="Revert to _og.pgm baseline">Restore</button>
+    <label title="Brush diameter in pixels (1 = single pixel)">Brush
+      <input id="brush" type="range" min="1" max="40" value="3"><span id="brush-val">3</span>
+    </label>
+  </div>
+
+  <div class="grp" data-group="shape">
+    <span class="lbl">Shape</span>
+    <button data-tool="select" title="Click an element on the map to select it">Select</button>
+    <button data-tool="point" title="Click to place a single point">Point</button>
+    <button data-tool="rect" title="Drag two corners to define a rectangle">Rect</button>
+    <button data-tool="polygon" title="Click to add vertex, click near start to close">Polygon</button>
+    <button data-tool="nogo" title="Closed polygon rasterized into _keepout.pgm">No-Go</button>
+    <select id="label-select" title="Label for the next shape"></select>
+    <button id="add-label" title="Add a custom label">+</button>
+  </div>
+
+  <div class="grp">
+    <button id="undo" title="Undo (Ctrl/Cmd+Z)">↶</button>
+    <button id="redo" title="Redo (Ctrl/Cmd+Shift+Z)">↷</button>
+    <button id="fit" title="Fit map to viewport">Fit</button>
+    <span id="zoom-info">100%</span>
+  </div>
+</header>
+
+<main>
+  <canvas id="cv"></canvas>
+  <aside id="side">
+    <details open>
+      <summary>Map</summary>
+      <div id="map-info">No map loaded</div>
+    </details>
+
+    <details open>
+      <summary>Elements <span class="count">(<span id="elem-count">0</span>)</span>
+        <button id="clear-elems" class="mini" title="Delete all elements">clear</button>
+        <label class="inline-toggle" title="Show #id tags on the canvas">
+          <input id="toggle-ids" type="checkbox" checked> IDs
+        </label>
+      </summary>
+      <ul id="elem-list"></ul>
+    </details>
+
+    <details open>
+      <summary>Filter — Label</summary>
+      <div id="filter-labels" class="filter-block"></div>
+    </details>
+
+    <details open>
+      <summary>Filter — Drawing kind</summary>
+      <div id="filter-kinds" class="filter-block"></div>
+    </details>
+
+    <details>
+      <summary>Help</summary>
+      <ul class="help">
+        <li>Wheel: zoom at cursor</li>
+        <li>Middle / Alt / Ctrl + drag: pan</li>
+        <li>Polygon / No-Go: click vertices, click near start to close</li>
+        <li>Esc: cancel current polygon</li>
+        <li>Select tool: click on element to highlight</li>
+        <li>Double-click sidebar item to rename label</li>
+        <li>Sidebar <code>nogo</code> button: mask closed shape into keepout</li>
+        <li>Del / Backspace: delete selected element</li>
+        <li>Brush 1 = single pixel · 2+ = circular disk</li>
+      </ul>
+    </details>
+  </aside>
+</main>
+
+<div id="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
