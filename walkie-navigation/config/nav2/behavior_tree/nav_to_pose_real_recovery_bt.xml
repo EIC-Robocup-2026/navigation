@@ -119,7 +119,7 @@
               -->
               <Sequence>
                 <Inverter>
-                  <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.05" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAPlannerRecoveryHelp error_code="{compute_path_error_code}"/>
                 <ClearEntireCostmap name="ClearGlobalCostmap-PlannerRecovery" service_name="global_costmap/clear_entirely_global_costmap"/>
@@ -135,7 +135,7 @@
             no stop).
           -->
           <RecoveryNode number_of_retries="2" name="FollowPath">
-              <FollowPath path="{path}" controller_id="{selected_controller}" error_code_id="{follow_path_error_code}"/>
+              <FollowPath path="{path}" controller_id="{selected_controller}" goal_checker_id="{selected_goal_checker}" error_code_id="{follow_path_error_code}"/>
               <!--
                 Near goal: skip the retry entirely — no second MPPI run, no more sideways movement.
                 Sequence fails immediately → RecoveryNode fails → PipelineSequence fails
@@ -144,7 +144,7 @@
               -->
               <Sequence>
                 <Inverter>
-                  <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
+                  <IsGoalNearby path="{path}" proximity_threshold="0.05" max_robot_pose_search_dist="1.5"/>
                 </Inverter>
                 <WouldAControllerRecoveryHelp error_code="{follow_path_error_code}"/>
                 <!-- <Wait wait_duration="2.0"/> -->
@@ -174,7 +174,7 @@
         <GoalUpdated/>
         <Sequence name="RetryOnlyIfFarFromGoal">
           <Inverter>
-            <IsGoalNearby path="{path}" proximity_threshold="0.2" max_robot_pose_search_dist="1.5"/>
+            <IsGoalNearby path="{path}" proximity_threshold="0.05" max_robot_pose_search_dist="1.5"/>
           </Inverter>
           <!-- <Wait wait_duration="5.0"/> -->
           <Wait wait_duration="2.0"/>

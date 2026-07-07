@@ -115,7 +115,7 @@ controller_server:
 
     # Humble-style name; works fine in newer distros too
     progress_checker_plugin: "progress_checker"
-    goal_checker_plugins: ["general_goal_checker"]
+    goal_checker_plugins: ["general_goal_checker", "precise_goal_checker"]
     controller_plugins: ["FollowPath"]
 
     # Progress checker parameters
@@ -129,6 +129,13 @@ controller_server:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.1
+      yaw_goal_tolerance: 0.01
+
+    # Precision mode — selected per-goal via the goal_checker_selector topic
+    precise_goal_checker:
+      stateful: True
+      plugin: "nav2_controller::SimpleGoalChecker"
+      xy_goal_tolerance: 0.02
       yaw_goal_tolerance: 0.01
 
     FollowPath:
