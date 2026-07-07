@@ -104,7 +104,7 @@ controller_server:
     # Put controller output on a separate topic so it can be filtered
     # by velocity_smoother + collision_monitor
     cmd_vel_topic: "/cmd_vel_controller"
-    odom_topic: "/omni_wheel_drive_controller/odom"  # Change this from "odom"
+    odom_topic: "/omni_wheel_drive_controller/odom" # Change this from "odom"
 
     use_sim_time: false
     controller_frequency: 20.0
@@ -121,8 +121,8 @@ controller_server:
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5   # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
-      movement_time_allowance: 4.0    # was 10.0 — detect stuck in 4 s instead of 10 s
+      required_movement_radius: 0.5 # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
+      movement_time_allowance: 4.0 # was 10.0 — detect stuck in 4 s instead of 10 s
 
     # Goal checker parameters
     general_goal_checker:
@@ -166,13 +166,13 @@ controller_server:
       vx_std: 0.25
       vy_std: 0.15
 
-      wz_std: 0.6                     # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
+      wz_std: 0.6 # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.3
       vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.5                     # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
+      wz_max: 1.5 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
       wz_min: -1.5
 
       ax_max: 2.5
@@ -191,7 +191,6 @@ controller_server:
 
       reset_period: 1.0
       regenerate_noises: false
-
 
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -216,32 +215,32 @@ controller_server:
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5         # pushes trajectories away from inflation zone
-        critical_weight: 20.0         # strong penalty for near-lethal cells
-        consider_footprint: true      # checks whole robot footprint, not just center
+        repulsion_weight: 1.5 # pushes trajectories away from inflation zone
+        critical_weight: 20.0 # strong penalty for near-lethal cells
+        consider_footprint: true # checks whole robot footprint, not just center
         collision_cost: 10000.0
         collision_margin_distance: 0.1
         near_goal_distance: 0.5
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.0              # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
+        cost_weight: 3.0 # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
         threshold_to_consider: 0.5
       GoalAngleCritic:
         enabled: true
-        cost_weight: 12.0             # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
+        cost_weight: 12.0 # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
         cost_power: 1
-        threshold_to_consider: 0.75   # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
+        threshold_to_consider: 0.75 # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
         symmetric_yaw_tolerance: false
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 14.0             # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
+        cost_weight: 14.0 # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
         max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 3      # was 4 — denser alignment sampling, tighter tracking on curves
+        trajectory_point_step: 3 # was 4 — denser alignment sampling, tighter tracking on curves
         threshold_to_consider: 0.5
         offset_from_furthest: 20
-        use_path_orientations: false  # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
+        use_path_orientations: false # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
       PathFollowCritic:
         enabled: true
         cost_power: 1
@@ -251,16 +250,16 @@ controller_server:
       PathAngleCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 16.0             # was 12.0 — stronger pull to face the path heading (drive forward)
+        cost_weight: 16.0 # was 12.0 — stronger pull to face the path heading (drive forward)
         offset_from_furthest: 4
         threshold_to_consider: 0.5
-        max_angle_to_furthest: 0.4    # was 0.5 — start correcting heading sooner so it doesn't drift into a strafe
-        mode: 0                       # FORWARD_PREFERENCE: prefer facing the travel direction
+        max_angle_to_furthest: 0.4 # was 0.5 — start correcting heading sooner so it doesn't drift into a strafe
+        mode: 0 # FORWARD_PREFERENCE: prefer facing the travel direction
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.5              # was 0.2 — must compete with path critics (6–8)
-        critical_cost: 200.0          # was 350.0 — costmap max is 253, 350 never fires!
+        cost_weight: 3.5 # was 0.2 — must compete with path critics (6–8)
+        critical_cost: 200.0 # was 350.0 — costmap max is 253, 350 never fires!
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 0.5
@@ -301,11 +300,11 @@ local_costmap:
     ros__parameters:
       # update_frequency: 5.0
       # publish_frequency: 2.0
-      
+
       #HRI
       update_frequency: 10.0
       publish_frequency: 5.0
-      
+
       global_frame: odom
       robot_base_frame: base_footprint
       use_sim_time: false
@@ -315,7 +314,7 @@ local_costmap:
       resolution: 0.05
       footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
       footprint_padding: 0.02
-      
+
       plugins: ["voxel_layer", "stvl_layer", "inflation_layer"]
       filters: ["keepout_filter"]
       keepout_filter:
@@ -324,8 +323,8 @@ local_costmap:
         filter_info_topic: "keepout_costmap_filter_info"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0    # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
-        inflation_radius: 0.25      # just outside robot inscribed radius — keeps clearance tight
+        cost_scaling_factor: 8.0 # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
+        inflation_radius: 0.25 # just outside robot inscribed radius — keeps clearance tight
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -353,10 +352,10 @@ local_costmap:
         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
         enabled: true
         # voxel_decay: 5.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
-        
+
         #HRI
-        voxel_decay: 1.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
-        
+        voxel_decay: 1.0 # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
+
         decay_model: 0
         voxel_size: 0.05
         track_unknown_space: false
@@ -378,7 +377,7 @@ local_costmap:
           expected_update_rate: 0.0
           observation_persistence: 0.0
           filter: "voxel"
-          voxel_min_points: 5     # was 0 — drop voxels with a single (noise) point
+          voxel_min_points: 5 # was 0 — drop voxels with a single (noise) point
           clear_after_reading: true
           max_z: 7.0
           min_z: 0.1
@@ -423,8 +422,8 @@ local_costmap:
           clear_after_reading: true
           max_z: 5.0
           min_z: 0.1
-          vertical_fov_angle: 0.70     # D415 depth vertical FOV ~40 deg (was 1.047/60 deg, copied from ZED)
-          horizontal_fov_angle: 1.13   # D415 depth horizontal FOV ~65 deg (was 1.396/80 deg, copied from ZED)
+          vertical_fov_angle: 0.70 # D415 depth vertical FOV ~40 deg (was 1.047/60 deg, copied from ZED)
+          horizontal_fov_angle: 1.13 # D415 depth horizontal FOV ~65 deg (was 1.396/80 deg, copied from ZED)
           decay_acceleration: 12.0
           model_type: 0
       always_send_full_costmap: True
@@ -474,8 +473,8 @@ global_costmap:
         # collision check + MPPI (consider_footprint), not by a huge inflation.
         # If the robot hugs tables too closely, raise toward ~0.45 (but not so
         # high it re-blocks your narrowest doorway).
-        cost_scaling_factor: 4.0    # gentle gradient: mild preference to centre in corridors
-        inflation_radius: 0.45      # ~0.05 m beyond circumscribed radius (0.30 m)
+        cost_scaling_factor: 4.0 # gentle gradient: mild preference to centre in corridors
+        inflation_radius: 0.45 # ~0.05 m beyond circumscribed radius (0.30 m)
       always_send_full_costmap: True
 
 map_server:
@@ -503,7 +502,7 @@ keepout_filter_mask_server:
 keepout_costmap_filter_info_server:
   ros__parameters:
     use_sim_time: false
-    type: 0                                  # 0 = keepout / preferred-lanes filter
+    type: 0 # 0 = keepout / preferred-lanes filter
     filter_info_topic: "keepout_costmap_filter_info"
     mask_topic: "keepout_filter_mask"
     base: 0.0
@@ -550,14 +549,13 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins:
-      ["drive_on_heading", "assisted_teleop", "wait", "spin"]
+    behavior_plugins: ["drive_on_heading", "assisted_teleop", "wait", "spin"]
     drive_on_heading:
       plugin: "nav2_behaviors::DriveOnHeading"
     wait:
       plugin: "nav2_behaviors::Wait"
     spin:
-      plugin: "nav2_behaviors::Spin"   # used by the BT failure path to face the goal heading
+      plugin: "nav2_behaviors::Spin" # used by the BT failure path to face the goal heading
     assisted_teleop:
       plugin: "nav2_behaviors::AssistedTeleop"
     global_frame: odom
@@ -615,17 +613,17 @@ collision_monitor:
     polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonStop:
       type: "circle"
-      radius: 0.35              # just outside robot circumscribed radius (0.255 m)
+      radius: 0.35 # just outside robot circumscribed radius (0.255 m)
       action_type: "stop"
-      min_points: 4             # was 1 — a single lidar noise point latched a hard-stop; need a real cluster
+      min_points: 4 # was 1 — a single lidar noise point latched a hard-stop; need a real cluster
       visualize: true
       polygon_pub_topic: "polygon_stop"
-      enabled: true             # was false — must be on to hard-stop at tabletop
+      enabled: true # was false — must be on to hard-stop at tabletop
     PolygonSlow:
       type: "circle"
-      radius: 0.55              # wider slow-down zone gives MPPI time to react
+      radius: 0.55 # wider slow-down zone gives MPPI time to react
       action_type: "slowdown"
-      min_points: 4             # was 2 — reject 1-2 point lidar noise spikes
+      min_points: 4 # was 2 — reject 1-2 point lidar noise spikes
       slowdown_ratio: 0.4
       visualize: true
       polygon_pub_topic: "polygon_slowdown"
@@ -692,5 +690,5 @@ collision_monitor:
     pointcloud:
       type: pointcloud
       topic: /unilidar/cloud/filtered
-      min_obstacle_height: 0.3  # ignore floor; detect table tops (~0.7–1.0 m) and legs
+      min_obstacle_height: 0.3 # ignore floor; detect table tops (~0.7–1.0 m) and legs
       max_obstacle_height: 1.5
