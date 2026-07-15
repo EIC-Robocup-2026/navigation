@@ -104,14 +104,14 @@ controller_server:
     # Put controller output on a separate topic so it can be filtered
     # by velocity_smoother + collision_monitor
     cmd_vel_topic: "/cmd_vel_controller"
-    odom_topic: "/omni_wheel_drive_controller/odom"  # Change this from "odom"
+    odom_topic: "/omni_wheel_drive_controller/odom" # Change this from "odom"
 
     use_sim_time: true
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    failure_tolerance: 0.2
 
     # Humble-style name; works fine in newer distros too
     progress_checker_plugin: "progress_checker"
@@ -166,8 +166,8 @@ controller_server:
       vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.5                     # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
-      wz_min: -1.5
+      wz_max: 2.0 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
+      wz_min: -2.0
 
       ax_max: 2.5
       ax_min: -2.5
@@ -185,7 +185,6 @@ controller_server:
 
       reset_period: 1.0
       regenerate_noises: false
-
 
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -210,9 +209,9 @@ controller_server:
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5         # pushes trajectories away from inflation zone
-        critical_weight: 20.0         # strong penalty for near-lethal cells
-        consider_footprint: true      # checks whole robot footprint, not just center
+        repulsion_weight: 1.5 # pushes trajectories away from inflation zone
+        critical_weight: 20.0 # strong penalty for near-lethal cells
+        consider_footprint: true # checks whole robot footprint, not just center
         collision_cost: 10000.0
         collision_margin_distance: 0.1
         near_goal_distance: 0.5
@@ -304,8 +303,8 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      # footprint_padding: 0.02
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      footprint_padding: 0.02
 
       # NOTE (sim): real robot also runs an "stvl_layer" here fed by the 3D lidar
       # (/unilidar) and the zed head camera. The sim spawns with use_zed:=false and
@@ -349,7 +348,7 @@ global_costmap:
       global_frame: map
       robot_base_frame: base_footprint
       use_sim_time: true
-      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
       footprint_padding: 0.02
 
       resolution: 0.05
@@ -481,10 +480,10 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [*velocity_value_p, *velocity_value_p, 1.0]
     min_velocity: [*velocity_value_n, *velocity_value_n, -1.0]
-    max_accel: [2.5, 2.5, 3.2]
-    max_decel: [-2.5, -2.5, -3.2]
-    cmd_vel_in_topic: "/cmd_vel_controller"
-    cmd_vel_out_topic: "/cmd_vel_smoothed"
+    max_accel: [0.05, 0.05, 1.0]
+    max_decel: [-0.05, -0.05, -1.0]
+    # cmd_vel_in_topic: "/cmd_vel_controller"
+    # cmd_vel_out_topic: "/cmd_vel_smoothed"
     odom_topic: "/omni_wheel_drive_controller/odom"
     odom_duration: 0.1
     deadband_velocity: [0.0, 0.0, 0.0]
@@ -495,8 +494,9 @@ collision_monitor:
     use_sim_time: true
     base_frame_id: base_footprint
     odom_frame_id: odom
-    cmd_vel_in_topic: "/cmd_vel_controller"
-    cmd_vel_out_topic: "/cmd_vel_nav"
+    # cmd_vel_in_topic: "/cmd_vel_controller"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel_nav"
     # Sim has only the 2-D /scan (no 3-D /unilidar pointcloud), so the real
     # robot's "pointcloud" source for tabletop obstacles is omitted here.
     observation_sources: ["scan"]
@@ -515,7 +515,7 @@ collision_monitor:
       radius: 0.55              # wider slow-down zone gives MPPI time to react
       action_type: "slowdown"
       min_points: 4             # was 2 — reject 1-2 point lidar noise spikes
-      slowdown_ratio: 0.4
+      slowdown_ratio: 0.9
       visualize: true
       polygon_pub_topic: "polygon_slowdown"
       enabled: true

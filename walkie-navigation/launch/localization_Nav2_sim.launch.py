@@ -11,6 +11,11 @@ from launch_ros.actions import Node
 def generate_launch_description():
     # Get the directory of the nav2_bringup package
     bringup_dir = get_package_share_directory("nav2_bringup")
+    # This package's own launch dir — used to source a forked bringup_launch.py
+    # (see below) that fixes a cmd_vel remap bug in the vendored nav2_bringup
+    # (controller_server/velocity_smoother's cmd_vel got remapped straight to
+    # cmd_vel_nav, bypassing velocity_smoother and collision_monitor entirely).
+    walkie_nav_launch_dir = os.path.dirname(os.path.realpath(__file__))
     default_nav2_config = os.path.join(
         get_package_share_directory("robot_navigation"),
         "config",
@@ -31,7 +36,7 @@ def generate_launch_description():
 
     default_map = (
         get_package_share_directory("robot_navigation")
-        + "/map/8_23102025_SimWalkie_awssmallhouse_slam_toolbox/map.yaml"
+        + "/map/08_23102025_SimWalkie_awssmallhouse_slam_toolbox/map.yaml"
     )
 
     # Declare launch arguments
@@ -58,7 +63,7 @@ def generate_launch_description():
     # Include navigation launch file
     nav2_bringup_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "bringup_launch.py")
+            os.path.join(walkie_nav_launch_dir, "bringup_launch.py")
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
