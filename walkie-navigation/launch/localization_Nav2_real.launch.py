@@ -42,7 +42,7 @@ def generate_launch_description():
 
     default_map_dir = (
         get_package_share_directory("robot_navigation")
-        + "/map/27_01072026_Arena"
+        + "/map/28_15072026_sasinHall"
     )
     default_map = default_map_dir + "/map.yaml"
     default_keepout_mask = default_map_dir + "/keepout.yaml"
