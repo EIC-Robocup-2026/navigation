@@ -606,7 +606,7 @@ collision_monitor:
     use_sim_time: false
     base_frame_id: base_footprint
     odom_frame_id: odom
-    cmd_vel_in_topic: "/cmd_vel_controller"
+    cmd_vel_in_topic: "/cmd_vel_smoothed"
     cmd_vel_out_topic: "/cmd_vel_nav"
     # Both 2-D scan AND 3-D pointcloud checked against every polygon.
     # This is the only way to hard-stop the robot for tabletop obstacles.
