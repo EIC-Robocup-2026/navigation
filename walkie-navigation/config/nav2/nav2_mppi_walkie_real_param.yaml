@@ -377,7 +377,7 @@ local_costmap:
           max_obstacle_height: 1.5
           expected_update_rate: 0.0
           observation_persistence: 0.0
-          IIfilter: "voxel"
+          filter: "voxel"
           voxel_min_points: 5 # was 0 — drop voxels with a single (noise) point
           clear_after_reading: true
           max_z: 7.0
