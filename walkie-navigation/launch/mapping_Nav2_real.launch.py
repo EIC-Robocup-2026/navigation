@@ -10,6 +10,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     # Get the directory of the nav2_bringup package
+    walkie_nav_launch_dir = os.path.dirname(os.path.realpath(__file__))
     bringup_dir = get_package_share_directory("nav2_bringup")
     default_nav2_config = os.path.join(
         get_package_share_directory("robot_navigation"),
@@ -80,7 +81,7 @@ def generate_launch_description():
     # Include navigation launch file (handles BT Navigator, Controller, Planner, etc.)
     navigation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "navigation_launch.py")
+            os.path.join(walkie_nav_launch_dir, "navigation_launch.py")
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
