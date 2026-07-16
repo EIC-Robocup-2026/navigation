@@ -19,7 +19,7 @@ def generate_launch_description():
     default_map = os.path.join(
         nav_pkg,
         "map",
-        "8_23102025_SimWalkie_awssmallhouse_slam_toolbox",
+        "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
         "map.yaml",
     )
     default_nav2_config = os.path.join(
