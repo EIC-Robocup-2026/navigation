@@ -59,7 +59,7 @@ def generate_launch_description():
 
     robot_state_publisher = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
-            os.path.join(bringup_pkg, "launch", "robot_state_publisher.launch.py")
+            os.path.join(description_pkg, "launch", "robot_state_publisher.launch.py")
         ),
         launch_arguments={
             "use_sim_time": "true",
