@@ -34,7 +34,7 @@ find_package(point_cloud_transport REQUIRED)
 
 remove_definitions(-DDISABLE_LIBUSB-1.0)
 find_package(Eigen3 REQUIRED)
-find_package(Boost REQUIRED COMPONENTS system thread)
+find_package(Boost REQUIRED COMPONENTS thread OPTIONAL_COMPONENTS system)
 
 find_package(PCL REQUIRED COMPONENTS filters common)
 if(NOT "${PCL_LIBRARIES}" STREQUAL "")
