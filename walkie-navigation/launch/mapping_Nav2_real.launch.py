@@ -2,10 +2,16 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import (
+    DeclareLaunchArgument,
+    GroupAction,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+)
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetRemap
+from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
 
 
 def generate_launch_description():
@@ -78,16 +84,46 @@ def generate_launch_description():
     )
 
     # Include navigation launch file (handles BT Navigator, Controller, Planner, etc.)
-    navigation_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "navigation_launch.py")
-        ),
-        launch_arguments={
-            "use_sim_time": use_sim_time,
-            "params_file": nav2_config,
-            "default_nav_to_pose_bt_xml": bt_xml_path,
-        }.items(),
+    # Nav2 nodes publish "cmd_vel"; remap it to cmd_vel_controller so commands
+    # pass velocity_smoother and collision_monitor before reaching twist_mux on
+    # cmd_vel_nav. SetRemap rules come before nav2_bringup's own
+    # cmd_vel -> cmd_vel_nav remaps, and the first matching rule wins.
+    navigation_launch = GroupAction(
+        actions=[
+            SetRemap(src="cmd_vel", dst="cmd_vel_controller"),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(bringup_dir, "launch", "navigation_launch.py")
+                ),
+                launch_arguments={
+                    "use_sim_time": use_sim_time,
+                    "params_file": nav2_config,
+                    "default_nav_to_pose_bt_xml": bt_xml_path,
+                }.items(),
+            ),
+        ]
     )
+
+    # nav2_bringup's navigation_launch.py no longer starts a lifecycle manager
+    # (only its bringup_launch.py does), so manage its nodes here. The name
+    # matches nav2_bringup's manager, which the RViz Nav2 panel talks to.
+    # SLAM Toolbox manages its own lifecycle.
+    def launch_lifecycle_manager(context):
+        return [
+            Node(
+                package="nav2_lifecycle_manager",
+                executable="lifecycle_manager",
+                name="lifecycle_manager_nav2",
+                output="screen",
+                parameters=[
+                    {
+                        "use_sim_time": use_sim_time,
+                        "autostart": True,
+                        "node_names": list(get_navigation_nodes(context)),
+                    }
+                ],
+            )
+        ]
 
     # Tilt the ZED head down near the goal so tabletop obstacles stay in the
     # camera FOV at close range (live marking) instead of dropping into the blind
@@ -138,6 +174,7 @@ def generate_launch_description():
     # Add the separated launch files
     ld.add_action(slam_launch)
     ld.add_action(navigation_launch)
+    ld.add_action(OpaqueFunction(function=launch_lifecycle_manager))
     ld.add_action(head_tilt_near_goal)
     ld.add_action(nav_commander)
 
