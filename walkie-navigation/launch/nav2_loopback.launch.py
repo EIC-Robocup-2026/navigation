@@ -77,6 +77,12 @@ def generate_launch_description():
         parameters=[{"use_sim_time": True}],
     )
 
+    # loopback_simulator is a Nav2 lifecycle node (C++ since the navigation2
+    # bump). No lifecycle manager manages it, so it configures and activates
+    # itself (autostart_node); until then it publishes no TF, clock or scan.
+    # It needs use_sim_time like upstream's loopback_simulation.launch.py:
+    # otherwise TF is stamped with wall time and the scan with sim time, and
+    # collision_monitor cannot transform the scan.
     loopback_simulator = Node(
         package="nav2_loopback_sim",
         executable="loopback_simulator",
@@ -85,6 +91,8 @@ def generate_launch_description():
         parameters=[
             nav2_config,
             {
+                "autostart_node": True,
+                "use_sim_time": True,
                 "base_frame_id": "base_footprint",
                 "scan_frame_id": "base_footprint",
                 "publish_map_odom_tf": True,
