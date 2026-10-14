@@ -2,10 +2,10 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetRemap
 
 
 def generate_launch_description():
@@ -57,28 +57,29 @@ def generate_launch_description():
         description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
     )
 
-    # Include localization launch file (handles AMCL and Map Server)
-    localization_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "localization_launch.py")
-        ),
-        launch_arguments={
-            "use_sim_time": use_sim_time,
-            "map": map_yaml_file,
-            "params_file": nav2_config,
-        }.items(),
-    )
-
-    # Include navigation launch file (handles BT Navigator, Controller, Planner, etc.)
-    navigation_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(bringup_dir, "launch", "navigation_launch.py")
-        ),
-        launch_arguments={
-            "use_sim_time": use_sim_time,
-            "params_file": nav2_config,
-            "default_nav_to_pose_bt_xml": bt_xml_path,
-        }.items(),
+    # Include navigation launch file.
+    # Nav2 nodes publish "cmd_vel"; remap it to cmd_vel_controller so commands
+    # pass velocity_smoother and collision_monitor before reaching twist_mux on
+    # cmd_vel_nav. SetRemap rules come before nav2_bringup's own
+    # cmd_vel -> cmd_vel_nav remaps, and the first matching rule wins.
+    # use_composition is off: the Jazzy component_container ignores
+    # --isolated, and bringup can deadlock while loading the lifecycle manager.
+    nav2_bringup_launch = GroupAction(
+        actions=[
+            SetRemap(src="cmd_vel", dst="cmd_vel_controller"),
+            IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(
+                    os.path.join(bringup_dir, "launch", "bringup_launch.py")
+                ),
+                launch_arguments={
+                    "use_sim_time": use_sim_time,
+                    "map": map_yaml_file,
+                    "params_file": nav2_config,
+                    "default_nav_to_pose_bt_xml": bt_xml_path,
+                    "use_composition": "False",
+                }.items(),
+            ),
+        ]
     )
     # Object approach-pose action server (/navigate_to_object -> Nav2)
     walkie_nav_config = os.path.join(
