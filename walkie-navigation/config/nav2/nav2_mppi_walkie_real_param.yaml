@@ -122,7 +122,7 @@ controller_server:
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.5 # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
-      movement_time_allowance: 4.0 # was 10.0 — detect stuck in 4 s instead of 10 s
+      movement_time_allowance: 8.0 # was 4.0 — 0.5 m in 4 s needs 0.125 m/s, more than the collision monitor slow-down (0.4 x 0.3 = 0.12 m/s)
 
     # Goal checker parameters
     general_goal_checker:
@@ -611,15 +611,7 @@ collision_monitor:
     # This is the only way to hard-stop the robot for tabletop obstacles.
     observation_sources: ["scan", "pointcloud"]
 
-    polygons: ["PolygonStop", "PolygonSlow", "FootprintApproach"]
-    PolygonStop:
-      type: "circle"
-      radius: 0.35 # just outside robot circumscribed radius (0.255 m)
-      action_type: "stop"
-      min_points: 4 # was 1 — a single lidar noise point latched a hard-stop; need a real cluster
-      visualize: true
-      polygon_pub_topic: "polygon_stop"
-      enabled: true # was false — must be on to hard-stop at tabletop
+    polygons: ["VelocityPolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonSlow:
       type: "circle"
       radius: 0.55 # wider slow-down zone gives MPPI time to react
@@ -639,50 +631,115 @@ collision_monitor:
       visualize: true
       polygon_pub_topic: "polygon_limit"
       enabled: true
+    # Static physical footprint (the local costmap footprint without padding),
+    # not /local_costmap/published_footprint. With min_points inside the
+    # polygon, "approach" scales every command to zero, including commands that
+    # drive away, so points inside the padding froze Nav2.
     FootprintApproach:
       type: "polygon"
       action_type: "approach"
-      footprint_topic: "/local_costmap/published_footprint"
+      points: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
       time_before_collision: 2.0
       simulation_time_step: 0.02
       min_points: 6
       visualize: False
       enabled: true
+    # Hard stop, chosen by the direction of the commanded velocity (holonomic:
+    # magnitude and direction of (vx, vy)). The first matching sub-polygon is
+    # used. A fixed circle blocked every command once it held points, including
+    # commands that drive away, and Nav2 could not move the robot again.
+    # Eight 45-degree direction bands. Each polygon covers only the footprint
+    # faces that lead in its direction, up to 0.35 m from base_footprint (the
+    # reach of the former PolygonStop circle), so a command that drives away
+    # from an obstacle selects a polygon that does not contain it.
+    #   Axis bands (+-22.5 deg): the leading face, widened by 0.02 m per side
+    #   for the sideways drift within the band.
+    #   Diagonal bands: L-shaped, both leading faces and the corner between.
+    # Footprint bounding box: front x 0.30, rear x -0.285, half width 0.239.
+    # Almost no translation (rotation in place) uses a 12-gon just outside the
+    # footprint's rotation sweep (largest footprint radius 0.326 m + 0.01 m).
+    # With the pointcloud source, this is the hard stop for tabletop obstacles.
+    # min_points 4: a single lidar noise point latched a hard stop.
     VelocityPolygonStop:
       type: "velocity_polygon"
       action_type: "stop"
-      min_points: 6
+      min_points: 4
       visualize: true
-      enabled: False
+      enabled: true
       polygon_pub_topic: "velocity_polygon_stop"
-      velocity_polygons:
-        ["rotation", "translation_forward", "translation_backward", "stopped"]
-      # holonomic: false
       holonomic: true
+      velocity_polygons: ["rotation", "forward", "forward_left", "left", "backward_left", "backward", "backward_right", "right", "forward_right"]
       rotation:
-        points: "[[0.3, 0.3], [0.3, -0.3], [-0.3, -0.3], [-0.3, 0.3]]"
+        points: "[[0.336, 0.09], [0.246, 0.246], [0.09, 0.336], [-0.09, 0.336], [-0.246, 0.246], [-0.336, 0.09], [-0.336, -0.09], [-0.246, -0.246], [-0.09, -0.336], [0.09, -0.336], [0.246, -0.246], [0.336, -0.09]]"
         linear_min: 0.0
-        linear_max: 0.05
-        theta_min: -1.0
-        theta_max: 1.0
-      translation_forward:
-        points: "[[0.35, 0.3], [0.35, -0.3], [-0.2, -0.3], [-0.2, 0.3]]"
+        linear_max: 0.01
+        theta_min: -10.0
+        theta_max: 10.0
+      forward:
+        points: "[[0.35, 0.26], [0.35, -0.26], [0.0, -0.26], [0.0, 0.26]]"
         linear_min: 0.0
-        linear_max: 1.0
-        theta_min: -1.0
-        theta_max: 1.0
-      translation_backward:
-        points: "[[0.2, 0.3], [0.2, -0.3], [-0.35, -0.3], [-0.35, 0.3]]"
-        linear_min: -1.0
-        linear_max: 0.0
-        theta_min: -1.0
-        theta_max: 1.0
-      stopped:
-        points: "[[0.25, 0.25], [0.25, -0.25], [-0.25, -0.25], [-0.25, 0.25]]"
-        linear_min: -1.0
-        linear_max: 1.0
-        theta_min: -1.0
-        theta_max: 1.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: -0.3927
+        direction_end_angle: 0.3927
+      forward_left:
+        points: "[[0.35, -0.239], [0.35, 0.35], [-0.285, 0.35], [-0.285, 0.0], [0.0, 0.0], [0.0, -0.239]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: 0.3927
+        direction_end_angle: 1.1781
+      left:
+        points: "[[0.32, 0.35], [0.32, 0.0], [-0.305, 0.0], [-0.305, 0.35]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: 1.1781
+        direction_end_angle: 1.9635
+      backward_left:
+        points: "[[0.30, 0.35], [-0.35, 0.35], [-0.35, -0.239], [0.0, -0.239], [0.0, 0.0], [0.30, 0.0]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: 1.9635
+        direction_end_angle: 2.7489
+      backward:
+        # start > end: the range wraps through +-pi.
+        points: "[[0.0, 0.26], [0.0, -0.26], [-0.35, -0.26], [-0.35, 0.26]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: 2.7489
+        direction_end_angle: -2.7489
+      backward_right:
+        points: "[[0.30, -0.35], [0.30, 0.0], [0.0, 0.0], [0.0, 0.239], [-0.35, 0.239], [-0.35, -0.35]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: -2.7489
+        direction_end_angle: -1.9635
+      right:
+        points: "[[0.32, 0.0], [0.32, -0.35], [-0.305, -0.35], [-0.305, 0.0]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: -1.9635
+        direction_end_angle: -1.1781
+      forward_right:
+        points: "[[0.35, 0.239], [0.0, 0.239], [0.0, 0.0], [-0.285, 0.0], [-0.285, -0.35], [0.35, -0.35]]"
+        linear_min: 0.0
+        linear_max: 10.0
+        theta_min: -10.0
+        theta_max: 10.0
+        direction_start_angle: -1.1781
+        direction_end_angle: -0.3927
     scan:
       type: scan
       topic: /scan
