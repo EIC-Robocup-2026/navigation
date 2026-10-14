@@ -99,44 +99,6 @@ def generate_launch_description():
         ],
     )
 
-    lifecycle_manager_localization = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_localization",
-        output="screen",
-        parameters=[
-            {
-                "use_sim_time": use_sim_time,
-                "autostart": True,
-                "node_names": ["map_server", "amcl"],
-            }
-        ],
-    )
-
-    lifecycle_manager_navigation = Node(
-        package="nav2_lifecycle_manager",
-        executable="lifecycle_manager",
-        name="lifecycle_manager_navigation",
-        output="screen",
-        parameters=[
-            {
-                "use_sim_time": use_sim_time,
-                "autostart": True,
-                "node_names": [
-                    "controller_server",
-                    "smoother_server",
-                    "planner_server",
-                    "behavior_server",
-                    "bt_navigator",
-                    "waypoint_follower",
-                    "velocity_smoother",
-                    "collision_monitor",
-                    "docking_server",
-                ],
-            }
-        ],
-    )
-
     # Create launch description
     ld = LaunchDescription()
 
@@ -145,10 +107,7 @@ def generate_launch_description():
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_nav_debug_cmd)
-    ld.add_action(localization_launch)
-    ld.add_action(navigation_launch)
-    ld.add_action(lifecycle_manager_localization)
-    ld.add_action(lifecycle_manager_navigation)
+    ld.add_action(nav2_bringup_launch)
     ld.add_action(nav_commander)
 
     return ld
