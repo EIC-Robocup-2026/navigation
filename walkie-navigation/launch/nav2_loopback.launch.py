@@ -3,11 +3,12 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
 
 
 def generate_launch_description():
@@ -19,7 +20,7 @@ def generate_launch_description():
     default_map = os.path.join(
         nav_pkg,
         "map",
-        "8_23102025_SimWalkie_awssmallhouse_slam_toolbox",
+        "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
         "map.yaml",
     )
     default_nav2_config = os.path.join(
@@ -76,6 +77,12 @@ def generate_launch_description():
         parameters=[{"use_sim_time": True}],
     )
 
+    # loopback_simulator is a Nav2 lifecycle node (C++ since the navigation2
+    # bump). No lifecycle manager manages it, so it configures and activates
+    # itself (autostart_node); until then it publishes no TF, clock or scan.
+    # It needs use_sim_time like upstream's loopback_simulation.launch.py:
+    # otherwise TF is stamped with wall time and the scan with sim time, and
+    # collision_monitor cannot transform the scan.
     loopback_simulator = Node(
         package="nav2_loopback_sim",
         executable="loopback_simulator",
@@ -84,6 +91,8 @@ def generate_launch_description():
         parameters=[
             nav2_config,
             {
+                "autostart_node": True,
+                "use_sim_time": True,
                 "base_frame_id": "base_footprint",
                 "scan_frame_id": "base_footprint",
                 "publish_map_odom_tf": True,
@@ -126,6 +135,24 @@ def generate_launch_description():
         }.items(),
     )
 
+    # nav2_bringup's navigation_launch.py no longer starts a lifecycle manager
+    # (only its bringup_launch.py does), so manage its nodes here. The name
+    # matches nav2_bringup's manager, which the RViz Nav2 panel talks to.
+    def launch_lifecycle_manager(context):
+        return [
+            Node(
+                package="nav2_lifecycle_manager",
+                executable="lifecycle_manager",
+                name="lifecycle_manager_nav2",
+                output="screen",
+                parameters=[
+                    {"use_sim_time": True},
+                    {"autostart": True},
+                    {"node_names": list(get_navigation_nodes(context))},
+                ],
+            )
+        ]
+
     # Object approach-pose action server (/navigate_to_object -> Nav2).
     # No AMCL in loopback sim; the commander falls back to TF for robot pose.
     nav_commander = Node(
@@ -162,6 +189,7 @@ def generate_launch_description():
     ld.add_action(map_server)
     ld.add_action(map_lifecycle_manager)
     ld.add_action(nav2_navigation)
+    ld.add_action(OpaqueFunction(function=launch_lifecycle_manager))
     # ld.add_action(nav_commander)
     ld.add_action(rviz)
 
