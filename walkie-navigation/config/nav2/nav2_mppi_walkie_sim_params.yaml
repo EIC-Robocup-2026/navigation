@@ -248,9 +248,17 @@ controller_server:
         enabled: true
         cost_power: 1
         cost_weight: 16.0             # was 12.0 — stronger pull to face the path heading (drive forward)
-        offset_from_furthest: 4
+        # was 4 (0.2 m past the furthest sampled point). The critic scores the yaw
+        # at each trajectory end against the direction from that end to this
+        # point, so a near point turns small lateral offsets into large heading
+        # targets. 20 points (1 m) keeps the target close to the path tangent.
+        offset_from_furthest: 20
         threshold_to_consider: 0.5
-        max_angle_to_furthest: 0.4    # was 0.5 — start correcting heading sooner so it doesn't drift into a strafe
+        # was 0.4. Below this angle the critic adds no cost, and vx_max/vy_max
+        # limit each axis separately: with vx at 0.3, adding vy raises speed to
+        # 0.3/cos(crab), so the path and goal critics turn the robot until it
+        # crabs at this angle. MuJoCo, 0.4 rad: 16-23 deg crab while cruising.
+        max_angle_to_furthest: 0.1
         mode: 0                       # FORWARD_PREFERENCE: prefer facing the travel direction
       CostCritic:
         enabled: true
