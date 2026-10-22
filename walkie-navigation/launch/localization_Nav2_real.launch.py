@@ -272,8 +272,8 @@ def generate_launch_description():
     ld.add_action(nav_commander)
 
     # Keepout zone filter servers
-    # ld.add_action(keepout_filter_mask_server)
-    # ld.add_action(keepout_costmap_filter_info_server)
+    ld.add_action(keepout_filter_mask_server)
+    ld.add_action(keepout_costmap_filter_info_server)
     ld.add_action(lifecycle_manager_keepout)
 
     return ld

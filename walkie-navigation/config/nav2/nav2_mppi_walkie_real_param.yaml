@@ -360,8 +360,10 @@ local_costmap:
         map_subscribe_transient_local: True
       stvl_layer:
         plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
-        enabled: true
-        # voxel_decay: 5.0        # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
+        # Temporarily disabled: the head camera joint is broken. Set back to true and
+        # restart Nav2 once it is repaired (a runtime parameter change does not re-enable it).
+        enabled: false
+        # voxel_decay: 5.0       # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
 
         #HRI
         voxel_decay: 1.0 # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
