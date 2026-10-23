@@ -217,11 +217,11 @@ controller_server:
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5 # pushes trajectories away from inflation zone
-        critical_weight: 20.0 # strong penalty for near-lethal cells
+        repulsion_weight: 1.0 # pushes trajectories away from inflation zone
+        critical_weight: 15.0 # strong penalty for near-lethal cells
         consider_footprint: true # checks whole robot footprint, not just center
         collision_cost: 10000.0
-        collision_margin_distance: 0.1
+        collision_margin_distance: 0.05
         near_goal_distance: 0.5
       GoalCritic:
         enabled: true
@@ -269,8 +269,8 @@ controller_server:
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.5 # was 0.2 — must compete with path critics (6–8)
-        critical_cost: 200.0 # was 350.0 — costmap max is 253, 350 never fires!
+        cost_weight: 2.5 # was 0.2 — must compete with path critics (6–8)
+        critical_cost: 250.0 # was 350.0 — costmap max is 253, 350 never fires!
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 0.5
@@ -323,7 +323,7 @@ local_costmap:
       height: 3
       resolution: 0.05
       footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      footprint_padding: 0.02
+      footprint_padding: 0.01
 
       plugins: ["voxel_layer", "stvl_layer", "inflation_layer"]
       filters: ["keepout_filter"]
@@ -333,8 +333,8 @@ local_costmap:
         filter_info_topic: "keepout_costmap_filter_info"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0 # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
-        inflation_radius: 0.38 # >= circumscribed radius (0.354 m incl. 0.02 padding); MPPI needs this to skip full-footprint checks
+        cost_scaling_factor: 10.0 # 8.0 -> 10.0 steeper dropoff away from doorframe
+        inflation_radius: 0.36 # >= circumscribed radius; MPPI needs this to skip full-footprint checks
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -449,7 +449,7 @@ global_costmap:
       robot_base_frame: base_footprint
       use_sim_time: false
       footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      footprint_padding: 0.02
+      footprint_padding: 0.01
 
       resolution: 0.05
       track_unknown_space: true
@@ -478,15 +478,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        # Lowered for the Lattice planner. 0.8 m made every doorway (<1.6 m gap)
-        # high-cost, so any planner avoided them. 0.35 m leaves the centre of a
-        # ~0.7 m+ doorway cost-free while still giving a standoff gradient near
-        # obstacles. Footprint clearance is now guaranteed by Lattice's SE2
-        # collision check + MPPI (consider_footprint), not by a huge inflation.
-        # If the robot hugs tables too closely, raise toward ~0.45 (but not so
-        # high it re-blocks your narrowest doorway).
-        cost_scaling_factor: 4.0 # gentle gradient: mild preference to centre in corridors
-        inflation_radius: 0.45 # ~0.05 m beyond circumscribed radius (0.30 m)
+        cost_scaling_factor: 6.0 # 4.0 -> 6.0: higher cost gradient centres paths in doorways
+        inflation_radius: 0.40 # ~0.05 m beyond circumscribed radius (0.35 m)
       always_send_full_costmap: True
 
 map_server:
@@ -528,7 +521,7 @@ planner_server:
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.5
-      use_astar: false
+      use_astar: true
       allow_unknown: true
 
 smoother_server:
