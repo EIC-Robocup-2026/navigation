@@ -175,10 +175,10 @@ controller_server:
       wz_max: 1.5 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
       wz_min: -1.5
 
-      ax_max: 2.5
-      ax_min: -2.5
-      ay_max: 2.5
-      ay_min: -2.5
+      ax_max: 1.0
+      ax_min: -1.0
+      ay_max: 1.0
+      ay_min: -1.0
       az_max: 2.5
 
       iteration_count: 1
@@ -200,7 +200,7 @@ controller_server:
 
       TrajectoryValidator:
         plugin: "mppi::DefaultOptimalTrajectoryValidator"
-        collision_lookahead_time: 2.0
+        collision_lookahead_time: 1.0
         consider_footprint: true
 
       critics:
@@ -211,7 +211,6 @@ controller_server:
           "PathFollowCritic",
           "PathAngleCritic",
           "CostCritic",
-          "ObstaclesCritic",
           "TwirlingCritic",
         ]
       ObstaclesCritic:
@@ -241,7 +240,7 @@ controller_server:
         max_path_occupancy_ratio: 0.05
         trajectory_point_step: 3 # was 4 — denser alignment sampling, tighter tracking on curves
         threshold_to_consider: 0.5
-        offset_from_furthest: 20
+        offset_from_furthest: 6
         use_path_orientations: false # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
       PathFollowCritic:
         enabled: true
@@ -274,17 +273,17 @@ controller_server:
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 0.5
-        trajectory_point_step: 2
+        trajectory_point_step: 1
       TwirlingCritic:
         enabled: true
-        twirling_cost_power: 1
+        cost_power: 1
         # was 10.0 — that strongly penalized rotating, so the omni robot followed
         # turns by STRAFING instead of turning to face (sideways into doorways).
         # Low value: still curbs pointless pirouettes but lets it rotate to face
         # its travel direction. Strafing stays available (Omni model + vy kept).
         # 2.0 -> 1.0: every rad/s of wz was still being taxed, slowing rotate-to-
         # path and rotate-to-goal; halved so the angle critics win sooner.
-        twirling_cost_weight: 1.0
+        cost_weight: 1.0
 
 docking_server:
   ros__parameters:
@@ -321,9 +320,9 @@ local_costmap:
       rolling_window: true
       width: 3
       height: 3
-      resolution: 0.05
+      resolution: 0.025
       footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      footprint_padding: 0.01
+      footprint_padding: 0.0
 
       plugins: ["voxel_layer", "stvl_layer", "inflation_layer"]
       filters: ["keepout_filter"]
@@ -334,7 +333,7 @@ local_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 10.0 # 8.0 -> 10.0 steeper dropoff away from doorframe
-        inflation_radius: 0.36 # >= circumscribed radius; MPPI needs this to skip full-footprint checks
+        inflation_radius: 0.4 # >= circumscribed radius; MPPI needs this to skip full-footprint checks
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -449,7 +448,7 @@ global_costmap:
       robot_base_frame: base_footprint
       use_sim_time: false
       footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      footprint_padding: 0.01
+      footprint_padding: 0.0
 
       resolution: 0.05
       track_unknown_space: true
@@ -479,7 +478,7 @@ global_costmap:
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 6.0 # 4.0 -> 6.0: higher cost gradient centres paths in doorways
-        inflation_radius: 0.40 # ~0.05 m beyond circumscribed radius (0.35 m)
+        inflation_radius: 0.5 # ~0.05 m beyond circumscribed radius (0.35 m)
       always_send_full_costmap: True
 
 map_server:
@@ -595,8 +594,8 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [*velocity_value_p, *velocity_value_p, 1.0]
     min_velocity: [*velocity_value_n, *velocity_value_n, -1.0]
-    max_accel: [0.2, 0.2, 0.7]
-    max_decel: [-0.2, -0.2, -0.7]
+    max_accel: [0.6, 0.6, 1.0]
+    max_decel: [-0.6, -0.6, -1.0]
     # Topics are fixed in code: in "cmd_vel" (remapped to cmd_vel_controller by
     # the walkie launch files), out "cmd_vel_smoothed".
     odom_topic: "/omni_wheel_drive_controller/odom"
