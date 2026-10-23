@@ -102,12 +102,7 @@
                   <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0"/>
                   <ValidatePath path="{remaining_path}" footprint="[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]" max_cost="253"/>
                 </ReactiveSequence>
-                <Sequence name="PlanAndSmoothPath">
-                  <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-                  <ForceSuccess>
-                    <SmoothPath unsmoothed_path="{path}" smoothed_path="{path}" smoother_id="SmoothPath" check_for_collisions="false"/>
-                  </ForceSuccess>
-                </Sequence>
+                <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
               </Fallback>
               <!--
                 Planner failed.
