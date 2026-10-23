@@ -772,7 +772,7 @@ loopback_simulator:
     scan_frame_id: base_footprint
     publish_map_odom_tf: true
     publish_clock: true
-    enable_stamped_cmd_vel: false
+    enable_stamped_cmd_vel: true
     update_duration: 0.01
     scan_publish_dur: 0.1
     scan_range_min: 0.05
