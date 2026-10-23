@@ -23,7 +23,7 @@ def generate_launch_description():
         "config",
         "nav2",
         "behavior_tree",
-        "nav_topose_no_spin_backup_bt.xml",
+        "nav_to_pose_real_recovery_bt.xml",
     )
     default_map_dir = os.path.join(
         get_package_share_directory("robot_navigation"),
