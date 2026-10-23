@@ -79,13 +79,15 @@ def generate_launch_description():
     )
 
     # RewrittenYaml for Loopback Simulation:
-    # Forces sim time, disables 3D sensor layers, routes odom_topic to /odom
+    # Forces sim time, disables 3D sensor layers & keepout filters, routes odom_topic to /odom
     nav2_rewritted_params = RewrittenYaml(
         source_file=nav2_config,
         root_key="",
         param_rewrites={
             "use_sim_time": "true",
             "local_costmap.local_costmap.ros__parameters.stvl_layer.enabled": "false",
+            "local_costmap.local_costmap.ros__parameters.keepout_filter.enabled": "false",
+            "global_costmap.global_costmap.ros__parameters.keepout_filter.enabled": "false",
             "collision_monitor.ros__parameters.pointcloud.enabled": "false",
             "collision_monitor.ros__parameters.VelocityPolygonStop.enabled": "false",
             "controller_server.ros__parameters.odom_topic": "/odom",
@@ -150,6 +152,7 @@ def generate_launch_description():
         launch_arguments={
             "use_sim_time": "true",
             "params_file": nav2_rewritted_params,
+            "use_keepout_zones": "false",
         }.items(),
     )
 
