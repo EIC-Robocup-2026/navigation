@@ -329,7 +329,7 @@ local_costmap:
       filters: ["keepout_filter"]
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
-        enabled: True
+        enabled: KEEPOUT_ZONE_ENABLED
         filter_info_topic: "keepout_costmap_filter_info"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -457,7 +457,7 @@ global_costmap:
       filters: ["keepout_filter"]
       keepout_filter:
         plugin: "nav2_costmap_2d::KeepoutFilter"
-        enabled: True
+        enabled: KEEPOUT_ZONE_ENABLED
         filter_info_topic: "keepout_costmap_filter_info"
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"

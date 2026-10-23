@@ -97,6 +97,7 @@ def generate_launch_description():
                     "params_file": nav2_rewritted_params,
                     "default_nav_to_pose_bt_xml": bt_xml_path,
                     "use_composition": "False",
+                    "use_keepout_zones": "false",
                 }.items(),
             ),
         ]
