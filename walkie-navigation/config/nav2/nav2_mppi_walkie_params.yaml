@@ -1,6 +1,6 @@
 amcl:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -46,7 +46,7 @@ amcl:
 
 bt_navigator:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     global_frame: map
     robot_base_frame: base_footprint
     odom_topic: "/omni_wheel_drive_controller/odom"
@@ -93,25 +93,25 @@ bt_navigator:
 
 bt_navigator_navigate_through_poses_rclcpp_node:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 bt_navigator_navigate_to_pose_rclcpp_node:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 controller_server:
   ros__parameters:
     # controller_server publishes "cmd_vel" (fixed in code). The walkie launch
     # files remap it to cmd_vel_controller, so the command passes through
     # velocity_smoother -> collision_monitor -> cmd_vel_nav (twist_mux input).
-    odom_topic: "/omni_wheel_drive_controller/odom"  # Change this from "odom"
+    odom_topic: "/omni_wheel_drive_controller/odom" # Change this from "odom"
 
-    use_sim_time: true
+    use_sim_time: false
     controller_frequency: 20.0
     min_x_velocity_threshold: 0.001
     min_y_velocity_threshold: 0.001
     min_theta_velocity_threshold: 0.001
-    failure_tolerance: 0.3
+    failure_tolerance: 0.2
 
     # Humble-style name; works fine in newer distros too
     progress_checker_plugin: "progress_checker"
@@ -121,13 +121,16 @@ controller_server:
     # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
-      required_movement_radius: 0.5   # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
-      movement_time_allowance: 8.0    # was 4.0 — 0.5 m in 4 s needs 0.125 m/s, more than the collision monitor slow-down (0.4 x 0.3 = 0.12 m/s)
+      required_movement_radius: 0.5 # was 0.2 — oscillation ±0.1–0.2 m can no longer reset this
+      movement_time_allowance: 8.0 # was 4.0 — 0.5 m in 4 s needs 0.125 m/s, more than the collision monitor slow-down (0.4 x 0.3 = 0.12 m/s)
 
     # Goal checker parameters
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
+      # xy_goal_tolerance: 0.05
+      # yaw_goal_tolerance: 0.01
+
       xy_goal_tolerance: 0.1
       yaw_goal_tolerance: 0.01
 
@@ -158,15 +161,18 @@ controller_server:
 
       # vx_std: 0.2
       # vy_std: 0.1
+
+      #HRI
       vx_std: 0.25
       vy_std: 0.15
-      wz_std: 0.6                     # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
+
+      wz_std: 0.6 # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.3
       vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
-      wz_max: 1.5                     # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
+      wz_max: 1.5 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
       wz_min: -1.5
 
       ax_max: 2.5
@@ -187,7 +193,6 @@ controller_server:
 
       reset_period: 1.0
       regenerate_noises: false
-
 
       TrajectoryVisualizer:
         trajectory_step: 5
@@ -212,32 +217,32 @@ controller_server:
       ObstaclesCritic:
         enabled: true
         cost_power: 1
-        repulsion_weight: 1.5         # pushes trajectories away from inflation zone
-        critical_weight: 20.0         # strong penalty for near-lethal cells
-        consider_footprint: true      # checks whole robot footprint, not just center
+        repulsion_weight: 1.5 # pushes trajectories away from inflation zone
+        critical_weight: 20.0 # strong penalty for near-lethal cells
+        consider_footprint: true # checks whole robot footprint, not just center
         collision_cost: 10000.0
         collision_margin_distance: 0.1
         near_goal_distance: 0.5
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.0              # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
+        cost_weight: 3.0 # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
         threshold_to_consider: 0.5
       GoalAngleCritic:
         enabled: true
-        cost_weight: 12.0             # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
+        cost_weight: 12.0 # was 5.0 — final heading barely competed with path critics (6–16), robot settled position first and turned lazily
         cost_power: 1
-        threshold_to_consider: 0.75   # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
+        threshold_to_consider: 0.75 # was 0.5 — start blending the goal heading in earlier so it arrives mostly aligned
         symmetric_yaw_tolerance: false
       PathAlignCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 14.0             # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
+        cost_weight: 14.0 # was 8.0 — stick to the planned line laterally instead of beelining toward the goal
         max_path_occupancy_ratio: 0.05
-        trajectory_point_step: 3      # was 4 — denser alignment sampling, tighter tracking on curves
+        trajectory_point_step: 3 # was 4 — denser alignment sampling, tighter tracking on curves
         threshold_to_consider: 0.5
         offset_from_furthest: 20
-        use_path_orientations: false  # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
+        use_path_orientations: false # planner is NavFn (no reliable per-pose orientation); PathAngleCritic handles facing
       PathFollowCritic:
         enabled: true
         cost_power: 1
@@ -247,7 +252,7 @@ controller_server:
       PathAngleCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 16.0             # was 12.0 — stronger pull to face the path heading (drive forward)
+        cost_weight: 16.0 # was 12.0 — stronger pull to face the path heading (drive forward)
         # was 4 (0.2 m past the furthest sampled point). The critic scores the yaw
         # at each trajectory end against the direction from that end to this
         # point, so a near point turns small lateral offsets into large heading
@@ -257,14 +262,15 @@ controller_server:
         # was 0.4. Below this angle the critic adds no cost, and vx_max/vy_max
         # limit each axis separately: with vx at 0.3, adding vy raises speed to
         # 0.3/cos(crab), so the path and goal critics turn the robot until it
-        # crabs at this angle. MuJoCo, 0.4 rad: 16-23 deg crab while cruising.
+        # crabs at this angle. Values taken from the sim params (measured in
+        # MuJoCo, not yet on hardware).
         max_angle_to_furthest: 0.1
-        mode: 0                       # FORWARD_PREFERENCE: prefer facing the travel direction
+        mode: 0 # FORWARD_PREFERENCE: prefer facing the travel direction
       CostCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.5              # was 0.2 — must compete with path critics (6–8)
-        critical_cost: 200.0          # was 350.0 — costmap max is 253, 350 never fires!
+        cost_weight: 3.5 # was 0.2 — must compete with path critics (6–8)
+        critical_cost: 200.0 # was 350.0 — costmap max is 253, 350 never fires!
         consider_footprint: true
         collision_cost: 1000000.0
         near_goal_distance: 0.5
@@ -304,31 +310,35 @@ local_costmap:
     ros__parameters:
       # update_frequency: 5.0
       # publish_frequency: 2.0
+
+      #HRI
       update_frequency: 10.0
       publish_frequency: 5.0
+
       global_frame: odom
       robot_base_frame: base_footprint
-      use_sim_time: true
+      use_sim_time: false
       rolling_window: true
       width: 3
       height: 3
       resolution: 0.05
-      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
-      # footprint_padding: 0.02
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      footprint_padding: 0.02
 
-      # NOTE (sim): real robot also runs an "stvl_layer" here fed by the 3D lidar
-      # (/unilidar) and the zed head camera. The sim spawns with use_zed:=false and
-      # has no 3D lidar, so those sources don't exist — the STVL layer is omitted
-      # and obstacle sensing relies on the 2D /scan voxel_layer below.
-      plugins: ["voxel_layer", "inflation_layer"]
+      plugins: ["voxel_layer", "stvl_layer", "inflation_layer"]
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: KEEPOUT_ZONE_ENABLED
+        filter_info_topic: "keepout_costmap_filter_info"
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0    # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
-        inflation_radius: 0.35      # >= circumscribed radius (0.313 m incl. default 0.01 padding); MPPI needs this to skip full-footprint checks
+        cost_scaling_factor: 8.0 # 4.0 made the blue ring huge; 8.0 steeper dropoff = tighter visual ring
+        inflation_radius: 0.38 # >= circumscribed radius (0.354 m incl. 0.02 padding); MPPI needs this to skip full-footprint checks
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
-        publish_voxel_map: True
+        publish_voxel_map: False
         origin_z: 0.0
         z_resolution: 0.05
         z_voxels: 16
@@ -348,6 +358,86 @@ local_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
+      stvl_layer:
+        plugin: "spatio_temporal_voxel_layer/SpatioTemporalVoxelLayer"
+        # Temporarily disabled: the head camera joint is broken. Set back to true and
+        # restart Nav2 once it is repaired (a runtime parameter change does not re-enable it).
+        enabled: false
+        # voxel_decay: 5.0       # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
+
+        #HRI
+        voxel_decay: 1.0 # BT recovery waits 6 s (> 5 s) so dynamic objects passively decay during wait
+
+        decay_model: 0
+        voxel_size: 0.05
+        track_unknown_space: false
+        mark_threshold: 0
+        update_footprint_enabled: true
+        combination_method: 1
+        publish_voxel_map: true
+        transform_tolerance: 0.2
+        mapping_mode: false
+        observation_sources: pointcloud zed_head_pointcloud realsense_pointcloud
+        pointcloud:
+          data_type: PointCloud2
+          topic: /unilidar/cloud/filtered
+          marking: true
+          clearing: true
+          obstacle_range: 2.5
+          min_obstacle_height: 0.2
+          max_obstacle_height: 1.5
+          expected_update_rate: 0.0
+          observation_persistence: 0.0
+          filter: "voxel"
+          voxel_min_points: 5 # was 0 — drop voxels with a single (noise) point
+          clear_after_reading: true
+          max_z: 7.0
+          min_z: 0.1
+          vertical_fov_angle: 0.8745
+          horizontal_fov_angle: 1.048
+          decay_acceleration: 12.0
+          model_type: 1
+        zed_head_pointcloud:
+          data_type: PointCloud2
+          topic: /zed_head/zed_node/point_cloud/cloud_registered/filtered
+          marking: true
+          clearing: true
+          obstacle_range: 2.5
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.5
+          expected_update_rate: 0.0
+          observation_persistence: 0.0
+          filter: "voxel"
+          voxel_min_points: 5
+          clear_after_reading: true
+          max_z: 5.0
+          min_z: 0.1
+          vertical_fov_angle: 1.047
+          horizontal_fov_angle: 1.396
+          decay_acceleration: 12.0
+          model_type: 0
+        # RealSense D415 (real depth FOV ~65 H x 40 V). model_type 0 = depth-camera
+        # frustum clearing, so these MUST match the sensor or STVL clears voxels it
+        # never actually saw (or fails to clear ones it did).
+        realsense_pointcloud:
+          data_type: PointCloud2
+          topic: /camera/camera/depth/color/points/filtered
+          marking: true
+          clearing: true
+          obstacle_range: 2.5
+          min_obstacle_height: 0.1
+          max_obstacle_height: 1.5
+          expected_update_rate: 0.0
+          observation_persistence: 0.0
+          filter: "voxel"
+          voxel_min_points: 10
+          clear_after_reading: true
+          max_z: 5.0
+          min_z: 0.1
+          vertical_fov_angle: 0.70 # D415 depth vertical FOV ~40 deg (was 1.047/60 deg, copied from ZED)
+          horizontal_fov_angle: 1.13 # D415 depth horizontal FOV ~65 deg (was 1.396/80 deg, copied from ZED)
+          decay_acceleration: 12.0
+          model_type: 0
       always_send_full_costmap: True
 
 global_costmap:
@@ -357,14 +447,18 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_footprint
-      use_sim_time: true
-      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      use_sim_time: false
+      footprint: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
       footprint_padding: 0.02
 
       resolution: 0.05
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      # plugins: ["static_layer", "obstacle_layer", "inflation_layer", "stvl_layer"]
+      filters: ["keepout_filter"]
+      keepout_filter:
+        plugin: "nav2_costmap_2d::KeepoutFilter"
+        enabled: KEEPOUT_ZONE_ENABLED
+        filter_info_topic: "keepout_costmap_filter_info"
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
@@ -391,13 +485,13 @@ global_costmap:
         # collision check + MPPI (consider_footprint), not by a huge inflation.
         # If the robot hugs tables too closely, raise toward ~0.45 (but not so
         # high it re-blocks your narrowest doorway).
-        cost_scaling_factor: 4.0    # gentle gradient: mild preference to centre in corridors
-        inflation_radius: 0.45      # ~0.05 m beyond circumscribed radius (0.30 m)
+        cost_scaling_factor: 4.0 # gentle gradient: mild preference to centre in corridors
+        inflation_radius: 0.45 # ~0.05 m beyond circumscribed radius (0.30 m)
       always_send_full_costmap: True
 
 map_server:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     # Overridden in launch by the "map" launch configuration or provided default value.
     # To use in yaml, remove the default "map" value in the tb3_simulation_launch.py file & provide full path to map below.
     yaml_filename: ""
@@ -407,10 +501,29 @@ map_server:
     occupied_thresh_default: 0.65
     map_subscribe_transient_local: True
 
+# --- Keepout (no-go) zone filter servers ---
+# Feed the KeepoutFilter declared in local_/global_costmap. The mask server
+# publishes the no-go mask; the info server publishes the filter metadata.
+# yaml_filename is overridden in the launch by the "keepout_mask" argument.
+keepout_filter_mask_server:
+  ros__parameters:
+    use_sim_time: false
+    topic_name: "keepout_filter_mask"
+    yaml_filename: ""
+
+keepout_costmap_filter_info_server:
+  ros__parameters:
+    use_sim_time: false
+    type: 0 # 0 = keepout / preferred-lanes filter
+    filter_info_topic: "keepout_costmap_filter_info"
+    mask_topic: "keepout_filter_mask"
+    base: 0.0
+    multiplier: 1.0
+
 planner_server:
   ros__parameters:
     expected_planner_frequency: 20.0
-    use_sim_time: true
+    use_sim_time: false
     planner_plugins: ["GridBased"]
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"
@@ -448,20 +561,19 @@ behavior_server:
     costmap_topic: local_costmap/costmap_raw
     footprint_topic: local_costmap/published_footprint
     cycle_frequency: 10.0
-    behavior_plugins:
-      ["drive_on_heading", "assisted_teleop", "wait", "spin"]
+    behavior_plugins: ["drive_on_heading", "assisted_teleop", "wait", "spin"]
     drive_on_heading:
       plugin: "nav2_behaviors::DriveOnHeading"
     wait:
       plugin: "nav2_behaviors::Wait"
     spin:
-      plugin: "nav2_behaviors::Spin"   # used by the BT failure path to face the goal heading
+      plugin: "nav2_behaviors::Spin" # used by the BT failure path to face the goal heading
     assisted_teleop:
       plugin: "nav2_behaviors::AssistedTeleop"
     global_frame: odom
     robot_base_frame: base_footprint
     transform_tolerance: 0.1
-    use_sim_time: true
+    use_sim_time: false
     simulate_ahead_time: 2.0
     max_rotational_vel: 0.5
     min_rotational_vel: -0.5
@@ -469,11 +581,11 @@ behavior_server:
 
 robot_state_publisher:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
 
 waypoint_follower:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     loop_rate: 20
     stop_on_failure: false
     waypoint_task_executor_plugin: "wait_at_waypoint"
@@ -484,14 +596,14 @@ waypoint_follower:
 
 velocity_smoother:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
     max_velocity: [*velocity_value_p, *velocity_value_p, 1.0]
     min_velocity: [*velocity_value_n, *velocity_value_n, -1.0]
-    max_accel: [2.5, 2.5, 3.2]
-    max_decel: [-2.5, -2.5, -3.2]
+    max_accel: [0.2, 0.2, 0.7]
+    max_decel: [-0.2, -0.2, -0.7]
     # Topics are fixed in code: in "cmd_vel" (remapped to cmd_vel_controller by
     # the walkie launch files), out "cmd_vel_smoothed".
     odom_topic: "/omni_wheel_drive_controller/odom"
@@ -501,22 +613,22 @@ velocity_smoother:
 
 collision_monitor:
   ros__parameters:
-    use_sim_time: true
+    use_sim_time: false
     base_frame_id: base_footprint
     odom_frame_id: odom
     cmd_vel_in_topic: "cmd_vel_smoothed"
     cmd_vel_out_topic: "cmd_vel_nav"
-    # Sim has only the 2-D /scan (no 3-D /unilidar pointcloud), so the real
-    # robot's "pointcloud" source for tabletop obstacles is omitted here.
-    observation_sources: ["scan"]
+    # Both 2-D scan AND 3-D pointcloud checked against every polygon.
+    # This is the only way to hard-stop the robot for tabletop obstacles.
+    observation_sources: ["scan", "pointcloud"]
 
     polygons: ["VelocityPolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonSlow:
       type: "circle"
-      radius: 0.55              # wider slow-down zone gives MPPI time to react
+      radius: 0.55 # wider slow-down zone gives MPPI time to react
       action_type: "slowdown"
-      min_points: 4             # was 2 — reject 1-2 point lidar noise spikes
-      slowdown_ratio: 0.4
+      min_points: 4 # was 2 — reject 1-2 point lidar noise spikes
+      slowdown_ratio: 0.8
       visualize: true
       polygon_pub_topic: "polygon_slowdown"
       enabled: true
@@ -525,8 +637,8 @@ collision_monitor:
       points: "[[0.1, 0.1], [0.1, -0.1], [-0.1, -0.1], [-0.1, 0.1]]"
       action_type: "limit"
       min_points: 4
-      linear_limit: 0.4
-      angular_limit: 2.0
+      linear_limit: 0.5
+      angular_limit: 3.0
       visualize: true
       polygon_pub_topic: "polygon_limit"
       enabled: true
@@ -537,7 +649,7 @@ collision_monitor:
     FootprintApproach:
       type: "polygon"
       action_type: "approach"
-      points: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.133,0.239],[-0.180,0.210],[-0.275,0.120],[-0.285,0.000],[-0.275,-0.120],[-0.180,-0.210],[-0.133,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
+      points: "[[0.300,0.000],[0.275,0.120],[0.180,0.210],[0.133,0.239],[-0.205,0.239],[-0.285,0.159],[-0.285,-0.159],[-0.205,-0.239],[0.133,-0.239],[0.180,-0.210],[0.275,-0.120]]"
       time_before_collision: 2.0
       simulation_time_step: 0.02
       min_points: 6
@@ -556,7 +668,8 @@ collision_monitor:
     #   Diagonal bands: L-shaped, both leading faces and the corner between.
     # Footprint bounding box: front x 0.30, rear x -0.285, half width 0.239.
     # Almost no translation (rotation in place) uses a 12-gon just outside the
-    # footprint's rotation sweep (largest footprint radius 0.30 m + 0.01 m).
+    # footprint's rotation sweep (largest footprint radius 0.326 m + 0.01 m).
+    # With the pointcloud source, this is the hard stop for tabletop obstacles.
     # min_points 4: a single lidar noise point latched a hard stop.
     VelocityPolygonStop:
       type: "velocity_polygon"
@@ -568,7 +681,7 @@ collision_monitor:
       holonomic: true
       velocity_polygons: ["rotation", "forward", "forward_left", "left", "backward_left", "backward", "backward_right", "right", "forward_right"]
       rotation:
-        points: "[[0.31, 0.083], [0.227, 0.227], [0.083, 0.31], [-0.083, 0.31], [-0.227, 0.227], [-0.31, 0.083], [-0.31, -0.083], [-0.227, -0.227], [-0.083, -0.31], [0.083, -0.31], [0.227, -0.227], [0.31, -0.083]]"
+        points: "[[0.336, 0.09], [0.246, 0.246], [0.09, 0.336], [-0.09, 0.336], [-0.246, 0.246], [-0.336, 0.09], [-0.336, -0.09], [-0.246, -0.246], [-0.09, -0.336], [0.09, -0.336], [0.246, -0.246], [0.336, -0.09]]"
         linear_min: 0.0
         linear_max: 0.01
         theta_min: -10.0
@@ -643,3 +756,28 @@ collision_monitor:
       topic: /scan
       min_obstacle_height: 0.0
       max_obstacle_height: 2.0
+    pointcloud:
+      type: pointcloud
+      topic: /unilidar/cloud/filtered
+      min_obstacle_height: 0.3 # ignore floor; detect table tops (~0.7–1.0 m) and legs
+      max_obstacle_height: 1.5
+      enabled: true
+
+
+loopback_simulator:
+  ros__parameters:
+    base_frame_id: base_footprint
+    odom_frame_id: odom
+    map_frame_id: map
+    scan_frame_id: base_footprint
+    publish_map_odom_tf: true
+    publish_clock: true
+    enable_stamped_cmd_vel: true
+    update_duration: 0.01
+    scan_publish_dur: 0.1
+    scan_range_min: 0.05
+    scan_range_max: 20.0
+    scan_angle_min: -3.1415
+    scan_angle_max: 3.1415
+    scan_angle_increment: 0.0261
+    scan_use_inf: true

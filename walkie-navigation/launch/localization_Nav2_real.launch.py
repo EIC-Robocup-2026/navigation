@@ -10,7 +10,7 @@ from launch.actions import (
 )
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node, SetRemap
 from launch_ros.descriptions import ParameterFile
 from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
@@ -24,7 +24,7 @@ def generate_launch_description():
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
-        "nav2_mppi_walkie_real_param.yaml",
+        "nav2_mppi_walkie_params.yaml",
     )
     bt_xml_path = os.path.join(
         get_package_share_directory("robot_navigation"),
@@ -39,19 +39,19 @@ def generate_launch_description():
         "walkie_nav.yaml",
     )
 
+    default_map_dir = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "map",
+        "27_01072026_Arena",
+    )
+
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
-    map_yaml_file = LaunchConfiguration("map")
+    map_dir = LaunchConfiguration("map")
+    map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
     nav2_config = LaunchConfiguration("nav2_config")
     keepout_mask_file = LaunchConfiguration("keepout_mask")
     use_keepout_zones = LaunchConfiguration("use_keepout_zones")
-
-    default_map_dir = (
-        get_package_share_directory("robot_navigation")
-        + "/map/27_01072026_Arena"
-    )
-    default_map = default_map_dir + "/map.yaml"
-    default_keepout_mask = default_map_dir + "/keepout.yaml"
 
     # Lifecycle nodes managed by the keepout lifecycle manager.
     keepout_lifecycle_nodes = [
@@ -66,8 +66,10 @@ def generate_launch_description():
         description="Use simulation clock if true",
     )
 
-    declare_map_yaml_cmd = DeclareLaunchArgument(
-        "map", default_value=default_map, description="Full path to the map YAML file"
+    declare_map_cmd = DeclareLaunchArgument(
+        "map",
+        default_value=default_map_dir,
+        description="Full path to the map directory containing map.yaml and keepout.yaml",
     )
 
     declare_nav2_config_cmd = DeclareLaunchArgument(
@@ -90,11 +92,9 @@ def generate_launch_description():
 
     declare_keepout_mask_cmd = DeclareLaunchArgument(
         "keepout_mask",
-        default_value=default_keepout_mask,
+        default_value=PathJoinSubstitution([map_dir, "keepout.yaml"]),
         description=(
-            "Full path to the keepout mask YAML. Defaults to the mask next to the "
-            "default map; if you override 'map', override this to the matching "
-            "map_keepout.yaml in the same map directory."
+            "Full path to the keepout mask YAML. Defaults to keepout.yaml in map_dir."
         ),
     )
 
@@ -258,7 +258,7 @@ def generate_launch_description():
 
     # Add declared launch arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_map_yaml_cmd)
+    ld.add_action(declare_map_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_nav_debug_cmd)
     ld.add_action(declare_use_keepout_zones_cmd)

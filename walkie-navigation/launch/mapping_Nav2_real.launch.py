@@ -21,7 +21,7 @@ def generate_launch_description():
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
-        "nav2_mppi_walkie_real_restaurant_param.yaml",
+        "nav2_mppi_walkie_params.yaml",
     )
     bt_xml_path = os.path.join(
         get_package_share_directory("robot_navigation"),

@@ -4,8 +4,9 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node, SetRemap
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
@@ -15,34 +16,39 @@ def generate_launch_description():
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
-        "nav2_mppi_walkie_sim_params.yaml",
+        "nav2_mppi_walkie_params.yaml",
     )
     bt_xml_path = os.path.join(
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
         "behavior_tree",
-        "nav_topose_no_spin_backup_bt.xml",
+        "nav_to_pose_real_recovery_bt.xml",
     )
-    # Create launch configuration variables
-    use_sim_time = LaunchConfiguration("use_sim_time")
-    map_yaml_file = LaunchConfiguration("map")
-    nav2_config = LaunchConfiguration("nav2_config")
-
-    default_map = os.path.join(
+    default_map_dir = os.path.join(
         get_package_share_directory("robot_navigation"),
         "map",
         "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
-        "map.yaml",
     )
+
+    # Create launch configuration variables
+    use_sim_time = LaunchConfiguration("use_sim_time")
+    map_dir = LaunchConfiguration("map")
+    map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
+    nav2_config = LaunchConfiguration("nav2_config")
+    use_pointcloud = LaunchConfiguration("use_pointcloud")
+    use_keepout_zones = LaunchConfiguration("use_keepout_zones")
+    keepout_mask_file = LaunchConfiguration("keepout_mask")
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         "use_sim_time", default_value="true", description="Use simulation clock if true"
     )
 
-    declare_map_yaml_cmd = DeclareLaunchArgument(
-        "map", default_value=default_map, description="Full path to the map YAML file"
+    declare_map_cmd = DeclareLaunchArgument(
+        "map",
+        default_value=default_map_dir,
+        description="Full path to the map directory containing map.yaml and keepout.yaml",
     )
 
     declare_nav2_config_cmd = DeclareLaunchArgument(
@@ -51,10 +57,40 @@ def generate_launch_description():
         description="Full path to the nav2 config YAML file",
     )
 
+    declare_use_pointcloud_cmd = DeclareLaunchArgument(
+        "use_pointcloud",
+        default_value="false",
+        description="Whether to enable 3D pointcloud layers in simulation",
+    )
+
+    declare_use_keepout_zones_cmd = DeclareLaunchArgument(
+        "use_keepout_zones",
+        default_value="false",
+        description="Whether to enable keepout (no-go) zone filters",
+    )
+
+    declare_keepout_mask_cmd = DeclareLaunchArgument(
+        "keepout_mask",
+        default_value=PathJoinSubstitution([map_dir, "keepout.yaml"]),
+        description="Full path to keepout mask YAML file to load. Defaults to keepout.yaml in map_dir.",
+    )
+
     declare_nav_debug_cmd = DeclareLaunchArgument(
         "nav_debug",
         default_value="false",
         description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
+    )
+
+    # Simulation parameter substitutions via RewrittenYaml
+    nav2_rewritted_params = RewrittenYaml(
+        source_file=nav2_config,
+        root_key="",
+        param_rewrites={
+            "use_sim_time": use_sim_time,
+            "local_costmap.local_costmap.ros__parameters.stvl_layer.enabled": use_pointcloud,
+            "collision_monitor.ros__parameters.pointcloud.enabled": use_pointcloud,
+        },
+        convert_types=True,
     )
 
     # Include navigation launch file.
@@ -74,9 +110,11 @@ def generate_launch_description():
                 launch_arguments={
                     "use_sim_time": use_sim_time,
                     "map": map_yaml_file,
-                    "params_file": nav2_config,
+                    "params_file": nav2_rewritted_params,
                     "default_nav_to_pose_bt_xml": bt_xml_path,
                     "use_composition": "False",
+                    "use_keepout_zones": use_keepout_zones,
+                    "keepout_mask": keepout_mask_file,
                 }.items(),
             ),
         ]
@@ -104,8 +142,11 @@ def generate_launch_description():
 
     # Add declared launch arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_map_yaml_cmd)
+    ld.add_action(declare_map_cmd)
     ld.add_action(declare_nav2_config_cmd)
+    ld.add_action(declare_use_pointcloud_cmd)
+    ld.add_action(declare_use_keepout_zones_cmd)
+    ld.add_action(declare_keepout_mask_cmd)
     ld.add_action(declare_nav_debug_cmd)
     ld.add_action(nav2_bringup_launch)
     ld.add_action(nav_commander)
