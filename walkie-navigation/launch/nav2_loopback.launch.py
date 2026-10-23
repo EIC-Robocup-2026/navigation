@@ -92,7 +92,9 @@ def generate_launch_description():
     )
 
     # RewrittenYaml for Loopback Simulation:
-    # Forces sim time, disables 3D sensor layers, routes odom_topic to /odom
+    # Forces sim time, disables 3D sensor layers, routes odom_topic to /odom,
+    # routes collision_monitor cmd_vel_out_topic to cmd_vel (read by loopback_simulator),
+    # and sets enable_stamped_cmd_vel: false to match loopback_simulator plain Twist
     nav2_rewritted_params = RewrittenYaml(
         source_file=nav2_config,
         root_key="",
@@ -101,9 +103,14 @@ def generate_launch_description():
             "local_costmap.local_costmap.ros__parameters.stvl_layer.enabled": "false",
             "collision_monitor.ros__parameters.pointcloud.enabled": "false",
             "collision_monitor.ros__parameters.VelocityPolygonStop.enabled": "false",
+            "collision_monitor.ros__parameters.cmd_vel_out_topic": "cmd_vel",
             "controller_server.ros__parameters.odom_topic": "/odom",
             "velocity_smoother.ros__parameters.odom_topic": "/odom",
             "bt_navigator.ros__parameters.odom_topic": "/odom",
+            "controller_server.ros__parameters.enable_stamped_cmd_vel": "false",
+            "velocity_smoother.ros__parameters.enable_stamped_cmd_vel": "false",
+            "collision_monitor.ros__parameters.enable_stamped_cmd_vel": "false",
+            "behavior_server.ros__parameters.enable_stamped_cmd_vel": "false",
         },
         convert_types=True,
     )
