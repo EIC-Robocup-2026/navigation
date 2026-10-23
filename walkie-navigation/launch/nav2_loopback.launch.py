@@ -9,6 +9,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
@@ -27,7 +28,7 @@ def generate_launch_description():
         nav_pkg,
         "config",
         "nav2",
-        "nav2_mppi_walkie_loopback_params.yaml",
+        "nav2_mppi_walkie_params.yaml",
     )
     rviz_config = os.path.join(nav2_bringup_pkg, "rviz", "nav2_default_view.rviz")
 
@@ -77,6 +78,23 @@ def generate_launch_description():
         parameters=[{"use_sim_time": True}],
     )
 
+    # RewrittenYaml for Loopback Simulation:
+    # Forces sim time, disables 3D sensor layers, routes odom_topic to /odom
+    nav2_rewritted_params = RewrittenYaml(
+        source_file=nav2_config,
+        root_key="",
+        param_rewrites={
+            "use_sim_time": "true",
+            "local_costmap.local_costmap.ros__parameters.stvl_layer.enabled": "false",
+            "collision_monitor.ros__parameters.pointcloud.enabled": "false",
+            "collision_monitor.ros__parameters.VelocityPolygonStop.enabled": "false",
+            "controller_server.ros__parameters.odom_topic": "/odom",
+            "velocity_smoother.ros__parameters.odom_topic": "/odom",
+            "bt_navigator.ros__parameters.odom_topic": "/odom",
+        },
+        convert_types=True,
+    )
+
     # loopback_simulator is a Nav2 lifecycle node (C++ since the navigation2
     # bump). No lifecycle manager manages it, so it configures and activates
     # itself (autostart_node); until then it publishes no TF, clock or scan.
@@ -89,7 +107,7 @@ def generate_launch_description():
         name="loopback_simulator",
         output="screen",
         parameters=[
-            nav2_config,
+            nav2_rewritted_params,
             {
                 "autostart_node": True,
                 "use_sim_time": True,
@@ -108,7 +126,7 @@ def generate_launch_description():
         name="map_server",
         output="screen",
         parameters=[
-            nav2_config,
+            nav2_rewritted_params,
             {"yaml_filename": map_yaml_file, "use_sim_time": True},
         ],
     )
@@ -131,7 +149,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "use_sim_time": "true",
-            "params_file": nav2_config,
+            "params_file": nav2_rewritted_params,
         }.items(),
     )
 

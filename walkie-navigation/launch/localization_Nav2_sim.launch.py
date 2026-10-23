@@ -6,6 +6,7 @@ from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDesc
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node, SetRemap
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
@@ -15,7 +16,7 @@ def generate_launch_description():
         get_package_share_directory("robot_navigation"),
         "config",
         "nav2",
-        "nav2_mppi_walkie_sim_params.yaml",
+        "nav2_mppi_walkie_params.yaml",
     )
     bt_xml_path = os.path.join(
         get_package_share_directory("robot_navigation"),
@@ -28,6 +29,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     map_yaml_file = LaunchConfiguration("map")
     nav2_config = LaunchConfiguration("nav2_config")
+    use_pointcloud = LaunchConfiguration("use_pointcloud")
 
     default_map = os.path.join(
         get_package_share_directory("robot_navigation"),
@@ -51,10 +53,28 @@ def generate_launch_description():
         description="Full path to the nav2 config YAML file",
     )
 
+    declare_use_pointcloud_cmd = DeclareLaunchArgument(
+        "use_pointcloud",
+        default_value="false",
+        description="Whether to enable 3D pointcloud layers in simulation",
+    )
+
     declare_nav_debug_cmd = DeclareLaunchArgument(
         "nav_debug",
         default_value="false",
         description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
+    )
+
+    # Simulation parameter substitutions via RewrittenYaml
+    nav2_rewritted_params = RewrittenYaml(
+        source_file=nav2_config,
+        root_key="",
+        param_rewrites={
+            "use_sim_time": use_sim_time,
+            "local_costmap.local_costmap.ros__parameters.stvl_layer.enabled": use_pointcloud,
+            "collision_monitor.ros__parameters.pointcloud.enabled": use_pointcloud,
+        },
+        convert_types=True,
     )
 
     # Include navigation launch file.
@@ -74,7 +94,7 @@ def generate_launch_description():
                 launch_arguments={
                     "use_sim_time": use_sim_time,
                     "map": map_yaml_file,
-                    "params_file": nav2_config,
+                    "params_file": nav2_rewritted_params,
                     "default_nav_to_pose_bt_xml": bt_xml_path,
                     "use_composition": "False",
                 }.items(),
@@ -106,6 +126,7 @@ def generate_launch_description():
     ld.add_action(declare_use_sim_time_cmd)
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
+    ld.add_action(declare_use_pointcloud_cmd)
     ld.add_action(declare_nav_debug_cmd)
     ld.add_action(nav2_bringup_launch)
     ld.add_action(nav_commander)
