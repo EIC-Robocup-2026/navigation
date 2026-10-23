@@ -8,6 +8,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from nav2_bringup.keepout_zone_launch import get_lifecycle_nodes as get_keepout_zone_nodes
 from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
 from nav2_common.launch import RewrittenYaml
 
@@ -35,6 +36,8 @@ def generate_launch_description():
     map_yaml_file = LaunchConfiguration("map")
     nav2_config = LaunchConfiguration("nav2_config")
     use_rviz = LaunchConfiguration("use_rviz")
+    use_keepout_zones = LaunchConfiguration("use_keepout_zones")
+    keepout_mask_file = LaunchConfiguration("keepout_mask")
 
     declare_map = DeclareLaunchArgument(
         "map",
@@ -55,6 +58,16 @@ def generate_launch_description():
         "nav_debug",
         default_value="false",
         description="Publish nav_commander debug markers (ROI cells, PCA, approach angle)",
+    )
+    declare_use_keepout_zones = DeclareLaunchArgument(
+        "use_keepout_zones",
+        default_value="false",
+        description="Whether to enable keepout (no-go) zone filters",
+    )
+    declare_keepout_mask = DeclareLaunchArgument(
+        "keepout_mask",
+        default_value="",
+        description="Full path to keepout mask YAML file to load",
     )
 
     walkie_urdf = os.path.join(description_pkg, "robots", "gz_walkie.urdf.xacro")
@@ -143,6 +156,20 @@ def generate_launch_description():
         ],
     )
 
+    # Keepout (no-go) zone servers (launches mask server and filter info server when enabled)
+    keepout_zone_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(nav2_bringup_pkg, "launch", "keepout_zone_launch.py")
+        ),
+        condition=IfCondition(use_keepout_zones),
+        launch_arguments={
+            "use_sim_time": "true",
+            "params_file": nav2_rewritted_params,
+            "keepout_mask": keepout_mask_file,
+            "use_keepout_zones": use_keepout_zones,
+        }.items(),
+    )
+
     nav2_navigation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(nav2_bringup_pkg, "launch", "navigation_launch.py")
@@ -150,7 +177,7 @@ def generate_launch_description():
         launch_arguments={
             "use_sim_time": "true",
             "params_file": nav2_rewritted_params,
-            "use_keepout_zones": "false",
+            "use_keepout_zones": use_keepout_zones,
         }.items(),
     )
 
@@ -158,6 +185,10 @@ def generate_launch_description():
     # (only its bringup_launch.py does), so manage its nodes here. The name
     # matches nav2_bringup's manager, which the RViz Nav2 panel talks to.
     def launch_lifecycle_manager(context):
+        lifecycle_nodes = list(get_navigation_nodes(context))
+        if use_keepout_zones.perform(context).lower() == "true":
+            lifecycle_nodes.extend(get_keepout_zone_nodes(context))
+
         return [
             Node(
                 package="nav2_lifecycle_manager",
@@ -167,7 +198,7 @@ def generate_launch_description():
                 parameters=[
                     {"use_sim_time": True},
                     {"autostart": True},
-                    {"node_names": list(get_navigation_nodes(context))},
+                    {"node_names": lifecycle_nodes},
                 ],
             )
         ]
@@ -201,12 +232,15 @@ def generate_launch_description():
     ld.add_action(declare_nav2_config)
     ld.add_action(declare_use_rviz)
     ld.add_action(declare_nav_debug)
+    ld.add_action(declare_use_keepout_zones)
+    ld.add_action(declare_keepout_mask)
 
     ld.add_action(robot_state_publisher)
     ld.add_action(joint_state_publisher)
     ld.add_action(loopback_simulator)
     ld.add_action(map_server)
     ld.add_action(map_lifecycle_manager)
+    ld.add_action(keepout_zone_launch)
     ld.add_action(nav2_navigation)
     ld.add_action(OpaqueFunction(function=launch_lifecycle_manager))
     # ld.add_action(nav_commander)

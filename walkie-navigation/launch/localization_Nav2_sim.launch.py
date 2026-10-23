@@ -30,6 +30,8 @@ def generate_launch_description():
     map_yaml_file = LaunchConfiguration("map")
     nav2_config = LaunchConfiguration("nav2_config")
     use_pointcloud = LaunchConfiguration("use_pointcloud")
+    use_keepout_zones = LaunchConfiguration("use_keepout_zones")
+    keepout_mask_file = LaunchConfiguration("keepout_mask")
 
     default_map = os.path.join(
         get_package_share_directory("robot_navigation"),
@@ -57,6 +59,18 @@ def generate_launch_description():
         "use_pointcloud",
         default_value="false",
         description="Whether to enable 3D pointcloud layers in simulation",
+    )
+
+    declare_use_keepout_zones_cmd = DeclareLaunchArgument(
+        "use_keepout_zones",
+        default_value="false",
+        description="Whether to enable keepout (no-go) zone filters",
+    )
+
+    declare_keepout_mask_cmd = DeclareLaunchArgument(
+        "keepout_mask",
+        default_value="",
+        description="Full path to keepout mask YAML file to load",
     )
 
     declare_nav_debug_cmd = DeclareLaunchArgument(
@@ -97,7 +111,8 @@ def generate_launch_description():
                     "params_file": nav2_rewritted_params,
                     "default_nav_to_pose_bt_xml": bt_xml_path,
                     "use_composition": "False",
-                    "use_keepout_zones": "false",
+                    "use_keepout_zones": use_keepout_zones,
+                    "keepout_mask": keepout_mask_file,
                 }.items(),
             ),
         ]
@@ -128,6 +143,8 @@ def generate_launch_description():
     ld.add_action(declare_map_yaml_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_use_pointcloud_cmd)
+    ld.add_action(declare_use_keepout_zones_cmd)
+    ld.add_action(declare_keepout_mask_cmd)
     ld.add_action(declare_nav_debug_cmd)
     ld.add_action(nav2_bringup_launch)
     ld.add_action(nav_commander)
