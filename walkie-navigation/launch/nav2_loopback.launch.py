@@ -130,7 +130,7 @@ def generate_launch_description():
                 "scan_frame_id": "base_footprint",
                 "publish_map_odom_tf": True,
                 "publish_clock": True,
-                "enable_stamped_cmd_vel": False,
+                "enable_stamped_cmd_vel": True,
             },
         ],
     )
