@@ -33,7 +33,7 @@ def generate_launch_description():
 
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
-    map_dir = LaunchConfiguration("map_dir")
+    map_dir = LaunchConfiguration("map")
     map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
     nav2_config = LaunchConfiguration("nav2_config")
     use_pointcloud = LaunchConfiguration("use_pointcloud")
@@ -45,8 +45,8 @@ def generate_launch_description():
         "use_sim_time", default_value="true", description="Use simulation clock if true"
     )
 
-    declare_map_dir_cmd = DeclareLaunchArgument(
-        "map_dir",
+    declare_map_cmd = DeclareLaunchArgument(
+        "map",
         default_value=default_map_dir,
         description="Full path to the map directory containing map.yaml and keepout.yaml",
     )
@@ -142,7 +142,7 @@ def generate_launch_description():
 
     # Add declared launch arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_map_dir_cmd)
+    ld.add_action(declare_map_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_use_pointcloud_cmd)
     ld.add_action(declare_use_keepout_zones_cmd)

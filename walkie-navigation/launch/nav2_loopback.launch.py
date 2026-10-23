@@ -32,15 +32,15 @@ def generate_launch_description():
     )
     rviz_config = os.path.join(nav2_bringup_pkg, "rviz", "nav2_default_view.rviz")
 
-    map_dir = LaunchConfiguration("map_dir")
+    map_dir = LaunchConfiguration("map")
     map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
     nav2_config = LaunchConfiguration("nav2_config")
     use_rviz = LaunchConfiguration("use_rviz")
     use_keepout_zones = LaunchConfiguration("use_keepout_zones")
     keepout_mask_file = LaunchConfiguration("keepout_mask")
 
-    declare_map_dir = DeclareLaunchArgument(
-        "map_dir",
+    declare_map = DeclareLaunchArgument(
+        "map",
         default_value=default_map_dir,
         description="Full path to map directory containing map.yaml and keepout.yaml",
     )
@@ -228,7 +228,7 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
-    ld.add_action(declare_map_dir)
+    ld.add_action(declare_map)
     ld.add_action(declare_nav2_config)
     ld.add_action(declare_use_rviz)
     ld.add_action(declare_nav_debug)
