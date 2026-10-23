@@ -4,7 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node, SetRemap
 from nav2_common.launch import RewrittenYaml
 
@@ -25,28 +25,30 @@ def generate_launch_description():
         "behavior_tree",
         "nav_topose_no_spin_backup_bt.xml",
     )
+    default_map_dir = os.path.join(
+        get_package_share_directory("robot_navigation"),
+        "map",
+        "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
+    )
+
     # Create launch configuration variables
     use_sim_time = LaunchConfiguration("use_sim_time")
-    map_yaml_file = LaunchConfiguration("map")
+    map_dir = LaunchConfiguration("map_dir")
+    map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
     nav2_config = LaunchConfiguration("nav2_config")
     use_pointcloud = LaunchConfiguration("use_pointcloud")
     use_keepout_zones = LaunchConfiguration("use_keepout_zones")
     keepout_mask_file = LaunchConfiguration("keepout_mask")
-
-    default_map = os.path.join(
-        get_package_share_directory("robot_navigation"),
-        "map",
-        "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
-        "map.yaml",
-    )
 
     # Declare launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
         "use_sim_time", default_value="true", description="Use simulation clock if true"
     )
 
-    declare_map_yaml_cmd = DeclareLaunchArgument(
-        "map", default_value=default_map, description="Full path to the map YAML file"
+    declare_map_dir_cmd = DeclareLaunchArgument(
+        "map_dir",
+        default_value=default_map_dir,
+        description="Full path to the map directory containing map.yaml and keepout.yaml",
     )
 
     declare_nav2_config_cmd = DeclareLaunchArgument(
@@ -69,8 +71,8 @@ def generate_launch_description():
 
     declare_keepout_mask_cmd = DeclareLaunchArgument(
         "keepout_mask",
-        default_value="",
-        description="Full path to keepout mask YAML file to load",
+        default_value=PathJoinSubstitution([map_dir, "keepout.yaml"]),
+        description="Full path to keepout mask YAML file to load. Defaults to keepout.yaml in map_dir.",
     )
 
     declare_nav_debug_cmd = DeclareLaunchArgument(
@@ -140,7 +142,7 @@ def generate_launch_description():
 
     # Add declared launch arguments
     ld.add_action(declare_use_sim_time_cmd)
-    ld.add_action(declare_map_yaml_cmd)
+    ld.add_action(declare_map_dir_cmd)
     ld.add_action(declare_nav2_config_cmd)
     ld.add_action(declare_use_pointcloud_cmd)
     ld.add_action(declare_use_keepout_zones_cmd)

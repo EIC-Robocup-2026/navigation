@@ -6,7 +6,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from nav2_bringup.keepout_zone_launch import get_lifecycle_nodes as get_keepout_zone_nodes
 from nav2_bringup.navigation_launch import get_lifecycle_nodes as get_navigation_nodes
@@ -19,11 +19,10 @@ def generate_launch_description():
     nav2_bringup_pkg = get_package_share_directory("nav2_bringup")
     description_pkg = get_package_share_directory("walkie_description")
 
-    default_map = os.path.join(
+    default_map_dir = os.path.join(
         nav_pkg,
         "map",
         "08_23102025_SimWalkie_awssmallhouse_slam_toolbox",
-        "map.yaml",
     )
     default_nav2_config = os.path.join(
         nav_pkg,
@@ -33,16 +32,17 @@ def generate_launch_description():
     )
     rviz_config = os.path.join(nav2_bringup_pkg, "rviz", "nav2_default_view.rviz")
 
-    map_yaml_file = LaunchConfiguration("map")
+    map_dir = LaunchConfiguration("map_dir")
+    map_yaml_file = PathJoinSubstitution([map_dir, "map.yaml"])
     nav2_config = LaunchConfiguration("nav2_config")
     use_rviz = LaunchConfiguration("use_rviz")
     use_keepout_zones = LaunchConfiguration("use_keepout_zones")
     keepout_mask_file = LaunchConfiguration("keepout_mask")
 
-    declare_map = DeclareLaunchArgument(
-        "map",
-        default_value=default_map,
-        description="Full path to map YAML file",
+    declare_map_dir = DeclareLaunchArgument(
+        "map_dir",
+        default_value=default_map_dir,
+        description="Full path to map directory containing map.yaml and keepout.yaml",
     )
     declare_nav2_config = DeclareLaunchArgument(
         "nav2_config",
@@ -66,8 +66,8 @@ def generate_launch_description():
     )
     declare_keepout_mask = DeclareLaunchArgument(
         "keepout_mask",
-        default_value="",
-        description="Full path to keepout mask YAML file to load",
+        default_value=PathJoinSubstitution([map_dir, "keepout.yaml"]),
+        description="Full path to keepout mask YAML file to load. Defaults to keepout.yaml in map_dir.",
     )
 
     walkie_urdf = os.path.join(description_pkg, "robots", "gz_walkie.urdf.xacro")
@@ -228,7 +228,7 @@ def generate_launch_description():
     )
 
     ld = LaunchDescription()
-    ld.add_action(declare_map)
+    ld.add_action(declare_map_dir)
     ld.add_action(declare_nav2_config)
     ld.add_action(declare_use_rviz)
     ld.add_action(declare_nav_debug)
