@@ -74,7 +74,6 @@ bt_navigator:
       - nav_thru_poses
       - nav_to_pose
       - route
-      - smooth_path
       - undock_robot
       - wait
 
@@ -118,13 +117,6 @@ controller_server:
     progress_checker_plugin: "progress_checker"
     goal_checker_plugins: ["general_goal_checker", "precise_goal_checker"]
     controller_plugins: ["FollowPath"]
-    path_handler_plugins: ["PathHandler"]
-
-    # Path handler parameters — bounds search so it cannot jump across walls/corners
-    PathHandler:
-      plugin: "nav2_controller::FeasiblePathHandler"
-      max_robot_pose_search_dist: 4.5 # was unbounded (~4.5m) — bounded so closest-point cannot skip across walls
-      prune_distance: 2.0 # was 2.0m — shortens transformed_global_plan to hug corners tightly
 
     # Progress checker parameters
     progress_checker:
@@ -176,8 +168,8 @@ controller_server:
 
       wz_std: 0.6 # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
-      vx_max: &velocity_value_p 0.6
-      vx_min: &velocity_value_n -0.6
+      vx_max: &velocity_value_p 0.3
+      vx_min: &velocity_value_n -0.3
       vy_max: *velocity_value_p
       vy_min: *velocity_value_n
       wz_max: 1.5 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
@@ -253,8 +245,8 @@ controller_server:
       PathFollowCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 5.0
-        offset_from_furthest: 2 # was 5 — track the immediate path curve instead of pulling diagonally across corners
+        cost_weight: 6.0
+        offset_from_furthest: 5
         threshold_to_consider: 0.5
       PathAngleCritic:
         enabled: true
@@ -540,19 +532,14 @@ planner_server:
       cost_travel_multiplier: 2.0
       use_final_approach_orientation: false
       smoother:
-        max_iterations: 100
-        w_smooth: 0.15
-        w_data: 0.5
-        tolerance: 1.0e-5
-        do_refinement: false
+        max_iterations: 1000
+        w_smooth: 0.3
+        w_data: 0.2
+        tolerance: 1.0e-10
+        do_refinement: true
 
 smoother_server:
   ros__parameters:
-    use_sim_time: false
-    costmap_topic: global_costmap/costmap_raw
-    footprint_topic: global_costmap/published_footprint
-    robot_base_frame: base_footprint
-    transform_tolerance: 0.1
     smoother_plugins: ["SmoothPath"]
 
     SmoothPath:

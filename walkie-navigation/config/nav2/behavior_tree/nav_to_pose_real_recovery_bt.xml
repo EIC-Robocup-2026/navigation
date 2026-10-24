@@ -77,13 +77,7 @@
             (its built-in fallback) when {prerotate_path} came back empty.
           -->
           <ForceSuccess>
-            <Sequence name="ComputeAndSmoothPreRotatePath">
-              <ComputePathToPose goal="{goal}" path="{prerotate_path}" planner_id="GridBased" error_code_id="{prerotate_plan_error}"/>
-              <Fallback name="SmoothOrKeepPreRotate">
-                <SmoothPath unsmoothed_path="{prerotate_path}" smoothed_path="{prerotate_path}" smoother_id="SmoothPath" max_smoothing_duration="1.0" check_for_collisions="false"/>
-                <AlwaysSuccess/>
-              </Fallback>
-            </Sequence>
+            <ComputePathToPose goal="{goal}" path="{prerotate_path}" planner_id="GridBased" error_code_id="{prerotate_plan_error}"/>
           </ForceSuccess>
           <ComputePathHeadingSpin path="{prerotate_path}" goal="{goal}" min_path_length="3.0" forward_sampling_distance="1.2" min_spin="0.25" max_spin="3.2" check_rotation_clearance="true" rotation_clearance_radius="0.40" lethal_cost_threshold="254" spin_dist="{prerotate_spin_dist}" do_spin="{prerotate_do_spin}"/>
           <Spin spin_dist="{prerotate_spin_dist}" time_allowance="15.0" is_recovery="false"/>
@@ -108,13 +102,7 @@
                   <TruncatePathLocal input_path="{path}" output_path="{remaining_path}" distance_forward="-1" distance_backward="0.0"/>
                   <ValidatePath path="{remaining_path}" footprint="[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0]]" max_cost="253"/>
                 </ReactiveSequence>
-                <Sequence name="ComputeAndSmoothPath">
-                  <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
-                  <Fallback name="SmoothOrKeep">
-                    <SmoothPath unsmoothed_path="{path}" smoothed_path="{path}" smoother_id="SmoothPath" max_smoothing_duration="1.0" check_for_collisions="false"/>
-                    <AlwaysSuccess/>
-                  </Fallback>
-                </Sequence>
+                <ComputePathToPose goal="{goal}" path="{path}" planner_id="{selected_planner}" error_code_id="{compute_path_error_code}"/>
               </Fallback>
               <!--
                 Planner failed.
