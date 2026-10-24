@@ -128,11 +128,8 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      # xy_goal_tolerance: 0.05
-      # yaw_goal_tolerance: 0.01
-
-      xy_goal_tolerance: 0.1
-      yaw_goal_tolerance: 0.01
+      xy_goal_tolerance: 0.02 # was 0.10 — tightened to 2 cm
+      yaw_goal_tolerance: 0.02 # ~1.15 deg (was 0.01 rad / 0.57 deg, prevents micro-hunting on yaw)
 
     # Precision mode — selected per-goal via the goal_checker_selector topic
     precise_goal_checker:
@@ -164,21 +161,21 @@ controller_server:
 
       #HRI
       vx_std: 0.25
-      vy_std: 0.08 # was 0.15 — lower lateral noise reduces crabbing jitter
+      vy_std: 0.15 # was 0.08 — allows active sampling of lateral velocity up to vy_max (0.4) near goal
 
       wz_std: 0.6 # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.6
       vx_min: &velocity_value_n -0.6
-      vy_max: &velocity_value_vy_p 0.18 # was 0.60 — limits crabbing so forward drive dominates
-      vy_min: &velocity_value_vy_n -0.18
+      vy_max: &velocity_value_vy_p 0.4
+      vy_min: &velocity_value_vy_n -0.4
       wz_max: 1.2 # was 1.5 — matches velocity smoother
       wz_min: -1.2
 
-      ax_max: 0.6 # was 1.0 — matches velocity smoother to prevent acceleration fighting
-      ax_min: -0.6
-      ay_max: 0.6 # was 1.0
-      ay_min: -0.6
+      ax_max: 0.4 # was 1.0 — matches velocity smoother to prevent acceleration fighting
+      ax_min: -0.4
+      ay_max: 0.4 # was 1.0
+      ay_min: -0.4
       az_max: 1.2 # was 2.5
 
       iteration_count: 2 # was 1 — refines control sequence to remove single-iteration sample noise
@@ -225,7 +222,7 @@ controller_server:
       GoalCritic:
         enabled: true
         cost_power: 1
-        cost_weight: 3.0 # was 5.0 — pulled position straight at the goal, cutting off the path end; the path critics own position now
+        cost_weight: 6.5 # was 3.0 — provides assertive pull to finish final lateral / forward approach into goal
         threshold_to_consider: 0.5
       GoalAngleCritic:
         enabled: true
@@ -247,7 +244,7 @@ controller_server:
         cost_power: 1
         cost_weight: 6.0
         offset_from_furthest: 5
-        threshold_to_consider: 0.5
+        threshold_to_consider: 0.2 # was 0.5 — continues pulling robot along path down to 0.2 m instead of stalling at 0.4 m
       PathAngleCritic:
         enabled: true
         cost_power: 1
@@ -609,8 +606,8 @@ velocity_smoother:
     feedback: "OPEN_LOOP"
     max_velocity: [*velocity_value_p, *velocity_value_vy_p, 1.2]
     min_velocity: [*velocity_value_n, *velocity_value_vy_n, -1.2]
-    max_accel: [0.6, 0.6, 1.2]
-    max_decel: [-0.6, -0.6, -1.2]
+    max_accel: [0.4, 0.4, 1.2]
+    max_decel: [-0.4, -0.4, -1.2]
     # Topics are fixed in code: in "cmd_vel" (remapped to cmd_vel_controller by
     # the walkie launch files), out "cmd_vel_smoothed".
     odom_topic: "/omni_wheel_drive_controller/odom"
