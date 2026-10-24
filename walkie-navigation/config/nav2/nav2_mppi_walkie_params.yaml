@@ -164,28 +164,28 @@ controller_server:
 
       #HRI
       vx_std: 0.25
-      vy_std: 0.15
+      vy_std: 0.08 # was 0.15 — lower lateral noise reduces crabbing jitter
 
       wz_std: 0.6 # was 0.4 — sample more aggressive rotations so fast turns exist in the batch
 
       vx_max: &velocity_value_p 0.6
       vx_min: &velocity_value_n -0.6
-      vy_max: *velocity_value_p
-      vy_min: *velocity_value_n
-      wz_max: 1.5 # was 1.0 — faster rotate to path/goal heading (shim config above runs 3.0, so 1.5 is well within the base)
-      wz_min: -1.5
+      vy_max: &velocity_value_vy_p 0.18 # was 0.60 — limits crabbing so forward drive dominates
+      vy_min: &velocity_value_vy_n -0.18
+      wz_max: 1.2 # was 1.5 — matches velocity smoother
+      wz_min: -1.2
 
-      ax_max: 1.0
-      ax_min: -1.0
-      ay_max: 1.0
-      ay_min: -1.0
-      az_max: 2.5
+      ax_max: 0.6 # was 1.0 — matches velocity smoother to prevent acceleration fighting
+      ax_min: -0.6
+      ay_max: 0.6 # was 1.0
+      ay_min: -0.6
+      az_max: 1.2 # was 2.5
 
-      iteration_count: 1
+      iteration_count: 2 # was 1 — refines control sequence to remove single-iteration sample noise
       prune_distance: 1.0
       transform_tolerance: 0.1
-      temperature: 0.5
-      gamma: 0.015
+      temperature: 0.35 # was 0.5 — smoother trajectory distribution
+      gamma: 0.04 # was 0.015 — motion damping for smoother transitions
 
       motion_model: "Omni"
       Omni:
@@ -607,10 +607,10 @@ velocity_smoother:
     smoothing_frequency: 20.0
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [*velocity_value_p, *velocity_value_p, 1.0]
-    min_velocity: [*velocity_value_n, *velocity_value_n, -1.0]
-    max_accel: [0.6, 0.6, 1.0]
-    max_decel: [-0.6, -0.6, -1.0]
+    max_velocity: [*velocity_value_p, *velocity_value_vy_p, 1.2]
+    min_velocity: [*velocity_value_n, *velocity_value_vy_n, -1.2]
+    max_accel: [0.6, 0.6, 1.2]
+    max_decel: [-0.6, -0.6, -1.2]
     # Topics are fixed in code: in "cmd_vel" (remapped to cmd_vel_controller by
     # the walkie launch files), out "cmd_vel_smoothed".
     odom_topic: "/omni_wheel_drive_controller/odom"
@@ -632,7 +632,7 @@ collision_monitor:
     polygons: ["VelocityPolygonStop", "PolygonSlow", "FootprintApproach"]
     PolygonSlow:
       type: "circle"
-      radius: 0.55 # wider slow-down zone gives MPPI time to react
+      radius: 0.42 # was 0.55 — prevents doorway side walls from triggering continuous 83% slowdowns
       action_type: "slowdown"
       min_points: 4 # was 2 — reject 1-2 point lidar noise spikes
       slowdown_ratio: 0.8
